@@ -5,8 +5,11 @@
 #include <array>
 #endif
 
+//parameters to be later provided by a configuration file
 #define planesXsize 24
 #define planesYsize 24
+#define planeCount 2
+#define pedestalLimit 400
 
 class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
    public:
@@ -41,36 +44,8 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
                   { 183, std::make_tuple(1, 0, 6) },
                   { 184, std::make_tuple(1, 0, 0) }
             };
-      const int planeCount = 2;
-      //      const int asicXcoor[256] = {
-//            //layer12
-//            [169]=18, [170]=18, [171]=12, [172]=12,
-//            [173]=18, [174]=18, [175]=12, [176]=12,
-//            [177]=6, [178]=6, [179]=0, [180]=0,
-//            [181]=6, [182]=6, [183]=0, [184]=0,
-//            //singleHBU layer
-//            [185]=18, [186]=18, [187]=12, [188]=12 };
-//      const int asicYcoor[256] = {
-//            //layer12
-//            [169]=18, [170]=12, [171]=18, [172]=12,
-//            [173]=6, [174]=0, [175]=6, [176]=0,
-//            [177]=18, [178]=12, [179]=18, [180]=12,
-//            [181]=6, [182]=0, [183]=6, [184]=0,
-//            //singleHBU layer
-//            [185]=18, [186]=12, [187]=18, [188]=12
-//      };
-//      const int planeNumbers[256] = {
-//            //layer12
-//            [169]=1, [170]=1, [171]=1, [172]=1, [173]=1, [174]=1, [175]=1, [176]=1,
-//            [177]=1, [178]=1, [179]=1, [180]=1, [181]=1, [182]=1, [183]=1, [184]=1,
-//
-//            //singleHBU layer
-//            [185]=0, [186]=0, [187]=0, [188]=0
-//      };
-//      const int planesXsize = 24;
-//      const int planesYsize = 24;
-
-      const int pedestalLimit = 200;
+//      const int planeCount = 2;
+//      const int pedestalLimit = 400;
 };
 
 namespace {
