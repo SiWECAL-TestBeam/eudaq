@@ -51,27 +51,57 @@ namespace eudaq {
             conn_to_init.push_back(conn);
          }
       }
-      lk.unlock();
+    }
+    m_conf_init->SetSection("RunControl"); //TODO: RunControl section must exist
+    for(auto &conn: conn_to_init)
+      SendCommand("INIT", to_string(*m_conf_init), conn);
+  }
 
-      for (auto &conn : conn_to_init) {
-         std::string conn_type = conn->GetType();
-         std::string conn_name = conn->GetName();
-         std::string conn_addr = conn->GetRemote();
-         if (conn_type == "LogCollector") {
-            lk.lock();
-            std::string server_addr = m_conn_status[conn]->GetTag("_SERVER");
-            lk.unlock();
-            if (server_addr.find("tcp://") == 0 && conn_addr.find("tcp://") == 0) {
-               server_addr = conn_addr.substr(0, conn_addr.find_last_not_of("0123456789")) + ":"
-                     + server_addr.substr(server_addr.find_last_not_of("0123456789") + 1);
-            }
-            std::string server_name = conn_type + "." + conn_name;
-            if (server_name == "LogCollector.log" && !server_addr.empty()) {
-               m_conf_init->SetSection("");
-               m_conf_init->SetString("EUDAQ_LOG_ADDR", server_addr);
-               SendCommand("LOG", server_addr);
-            }
-         }
+  void RunControl::InitialiseSingleConnection(ConnectionSPC id) {  
+    EUDAQ_INFO("Processing Initialise command");
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+	  
+    auto st = m_conn_status[id]->GetState();
+    if(st != Status::STATE_UNINIT && st != Status::STATE_UNCONF){
+      	EUDAQ_ERROR(id->GetName()+" is not Status::STATE_UNINIT OR Status::STATE_UNCONF");
+	//TODO:: EUDAQ_THROW
+	return;
+    }
+    lk.unlock();
+
+    std::string conn_type = id->GetType();
+    std::string conn_name = id->GetName();
+    std::string conn_addr = id->GetRemote();
+    if(conn_type == "LogCollector"){
+	lk.lock();
+	std::string server_addr = m_conn_status[id]->GetTag("_SERVER");
+	lk.unlock();
+	if(server_addr.find("tcp://") == 0 && conn_addr.find("tcp://") == 0){
+	  server_addr = conn_addr.substr(0, conn_addr.find_last_not_of("0123456789"))
+	    + ":"
+	    + server_addr.substr(server_addr.find_last_not_of("0123456789")+1);
+	}
+	std::string server_name = conn_type+"."+conn_name;
+	if(server_name=="LogCollector.log" && !server_addr.empty()){
+	  m_conf_init->SetSection("");
+	  m_conf_init->SetString("EUDAQ_LOG_ADDR", server_addr);
+	  SendCommand("LOG", server_addr);
+	}
+      }
+    m_conf_init->SetSection("RunControl"); //TODO: RunControl section must exist
+    SendCommand("INIT", to_string(*m_conf_init), id);	  
+  }
+  
+  void RunControl::Configure(){
+    EUDAQ_INFO("Processing Configure command");
+    std::vector<ConnectionSPC> conn_to_conf;
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    for(auto &conn_st: m_conn_status){
+      auto &conn = conn_st.first;
+      auto st = conn_st.second->GetState();
+      if(st != Status::STATE_UNCONF && st != Status::STATE_CONF){
+	EUDAQ_ERROR(conn->GetName()+" is not Status::STATE_UNCONF OR Status::STATE_CONF, skipped");
+	//TODO:: EUDAQ_THROW
       }
       m_conf_init->SetSection("RunControl"); //TODO: RunControl section must exist
       for (auto &conn : conn_to_init)
@@ -112,26 +142,64 @@ namespace eudaq {
             m_conf->SetString(server_name, server_addr);
          }
       }
-      m_conf->SetSection("RunControl"); //TODO: RunControl section must exist
-      for (auto &conn : conn_to_conf)
-         SendCommand("CONFIG", to_string(*m_conf), conn);
-   }
+    }
+    m_conf->SetSection("RunControl"); //TODO: RunControl section must exist
+    for(auto &conn: conn_to_conf)
+      SendCommand("CONFIG", to_string(*m_conf), conn);
+  }
+  
+  void RunControl::ConfigureSingleConnection(ConnectionSPC id) {  
+    EUDAQ_INFO("Processing Configure command for connection ");
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    auto st = m_conn_status[id]->GetState();
+    if(st != Status::STATE_UNCONF && st != Status::STATE_CONF){
+	EUDAQ_ERROR(id->GetName()+" is not Status::STATE_UNCONF OR Status::STATE_CONF, skipped");
+	//TODO:: EUDAQ_THROW
+	return;
+    }
+    lk.unlock();
+    m_conf->SetSection("");
 
-   void RunControl::ReadConfigureFile(const std::string &path) {
-      m_conf = Configuration::MakeUniqueReadFile(path);
-      m_conf->SetSection("RunControl");
-   }
+    std::string conn_type = id->GetType();
+    std::string conn_name = id->GetName();
+    std::string conn_addr = id->GetRemote();
+    if(conn_type == "DataCollector" || conn_type == "LogCollector" || conn_type == "Monitor"){
+	lk.lock();
+	std::string server_addr = m_conn_status[id]->GetTag("_SERVER");
+	lk.unlock();
+	if(server_addr.find("tcp://") == 0 && conn_addr.find("tcp://") == 0){
+	  server_addr = conn_addr.substr(0, conn_addr.find_last_not_of("0123456789"))
+	    + ":"
+	    + server_addr.substr(server_addr.find_last_not_of("0123456789")+1);
+	}
+	std::string server_name = conn_type+"."+conn_name;
+	m_conf->SetString(server_name, server_addr);
+    }
+    m_conf->SetSection("RunControl"); //TODO: RunControl section must exist
+    SendCommand("CONFIG", to_string(*m_conf), id);
+  }
 
-   void RunControl::ReadInitilizeFile(const std::string &path) {
-      m_conf_init = Configuration::MakeUniqueReadFile(path);
-      m_conf_init->SetSection("RunControl");
-   }
-
-   void RunControl::Reset() {
-      EUDAQ_INFO("Processing Reset command");
-      m_listening = true;
-      SendCommand("RESET", "");
-   }
+  void RunControl::ReadConfigureFile(const std::string &path){
+    m_conf = Configuration::MakeUniqueReadFile(path);
+    m_conf->SetSection("RunControl");
+  }
+  
+  void RunControl::ReadInitilizeFile(const std::string &path){
+    m_conf_init = Configuration::MakeUniqueReadFile(path);
+    m_conf_init->SetSection("RunControl");
+  }
+  
+  void RunControl::Reset() {
+    EUDAQ_INFO("Processing Reset command");
+    m_listening = true;
+    SendCommand("RESET", "");
+  }
+  
+  void RunControl::ResetSingleConnection(ConnectionSPC id) {
+    EUDAQ_INFO("Processing Reset command for connection ");
+    m_listening = true;	  
+    SendCommand("RESET", "", id);
+  }  
 
    void RunControl::StartRun() {
       EUDAQ_INFO("Processing StartRun command for RUN #" + std::to_string(m_run_n));
@@ -188,30 +256,75 @@ namespace eudaq {
             SendCommand("START", to_string(m_run_n), conn);
          }
       }
-   }
+    }
 
-   void RunControl::StopRun() {
-      EUDAQ_INFO("Processing StopRun command for RUN #" + std::to_string(m_run_n));
-      m_listening = true;
-      m_run_n++;
-      std::vector<ConnectionSPC> conn_to_stop;
-      std::unique_lock<std::mutex> lk(m_mtx_conn);
-      for (auto &conn_st : m_conn_status) {
-         auto &conn = conn_st.first;
-         auto st = conn_st.second->GetState();
-         if (st != Status::STATE_RUNNING) {
-            EUDAQ_ERROR(conn->GetName() + " is not Status::STATE_RUNNING, skipped");
-            //TODO:: EUDAQ_THROW
-         } else {
-            conn_to_stop.push_back(conn);
-         }
+
+    //TODO: make sure datacollector is started before producer. waiting
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::string producer_last_start;
+    m_conf->SetSection("RunControl");
+    producer_last_start = m_conf->Get("EUDAQ_CTRL_PRODUCER_LAST_START", producer_last_start);
+    for(auto &conn :conn_to_run){
+      if(conn->GetType() == "Producer" &&
+	 conn->GetName() != producer_last_start){
+	SendCommand("START", to_string(m_run_n), conn);
       }
-      lk.unlock();
+    }
 
-      for (auto &conn : conn_to_stop) {
-         if (conn->GetType() == "Producer") {
-            SendCommand("STOP", "", conn);
-         }
+    auto tp_timeout = std::chrono::steady_clock::now()
+      + std::chrono::seconds(60);
+    for(auto &conn :conn_to_run){
+      if(conn->GetName() == producer_last_start){
+	continue;
+      }
+      while(1){
+	auto st = GetConnectionStatus(conn)->GetState();
+	if(st == Status::STATE_CONF){
+	  if(std::chrono::steady_clock::now()>tp_timeout){
+	    EUDAQ_ERROR("Timesout waiting running status from "+ conn->GetName());
+	  }
+	  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	  continue;
+	}else{
+	  break;
+	}
+      }
+    }
+    
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    for(auto &conn :conn_to_run){
+      if(conn->GetType() == "Producer" &&
+	 conn->GetName() == producer_last_start){
+	SendCommand("START", to_string(m_run_n), conn);
+      }
+    }
+  }
+  
+  void RunControl::StartSingleConnection(ConnectionSPC id) {  
+    EUDAQ_INFO(std::string("Processing StartRun command for connection ") + std::string(" and RUN #") + std::to_string(m_run_n));
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    auto st = m_conn_status[id]->GetState();
+    if(st != Status::STATE_CONF){
+	EUDAQ_ERROR(id->GetName()+" is not Status::STATE_CONF, skipped");
+	//TODO:: EUDAQ_THROW
+    }
+    lk.unlock();
+    
+    SendCommand("START", to_string(m_run_n), id);	  
+  }
+
+  void RunControl::StopRun(){
+    EUDAQ_INFO("Processing StopRun command for RUN #" + std::to_string(m_run_n));
+    m_listening = true;
+    m_run_n ++;
+    std::vector<ConnectionSPC> conn_to_stop;
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    for(auto &conn_st: m_conn_status){
+      auto &conn = conn_st.first;
+      auto st = conn_st.second->GetState();
+      if(st != Status::STATE_RUNNING){
+	EUDAQ_ERROR(conn->GetName()+" is not Status::STATE_RUNNING, skipped");
+	//TODO:: EUDAQ_THROW
       }
       //wait for all producers to stop first
       for (int n = 0; n <= 60; n++) {
@@ -262,26 +375,48 @@ namespace eudaq {
             EUDAQ_ERROR("Timesout waiting running status");
          }
       }
-   }
-
-   void RunControl::Terminate() {
-      EUDAQ_INFO("Processing Terminate command");
-      m_listening = false;
-      SendCommand("TERMINATE", "");
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-      CloseRunControl();
-   }
-
-   void RunControl::SendCommand(const std::string &cmd, const std::string &param, ConnectionSPC id) {
-      std::unique_lock<std::mutex> lk(m_mtx_sendcmd);
-      std::string packet(cmd);
-      if (param.length() > 0) {
-         packet += '\0' + param;
+    }
+  }
+  
+  void RunControl::StopSingleConnection(ConnectionSPC id) {  
+    EUDAQ_INFO(std::string("Processing StopRun command for connection ") + std::string("and RUN #") + std::to_string(m_run_n));
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    auto st = m_conn_status[id]->GetState();
+    if(st != Status::STATE_RUNNING){
+	EUDAQ_ERROR(id->GetName()+" is not Status::STATE_RUNNING, skipped");
+	//TODO:: EUDAQ_THROW
       }
-      if (id)
-         m_cmdserver->SendPacket(packet, *id);
-      else m_cmdserver->SendPacket(packet, ConnectionInfo::ALL);
-   }
+    lk.unlock();
+
+    SendCommand("STOP", "", id);	  
+  }
+
+  void RunControl::Terminate() {
+    EUDAQ_INFO("Processing Terminate command");
+    m_listening = false;
+    SendCommand("TERMINATE", "");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    CloseRunControl();
+  }
+  
+  void RunControl::TerminateSingleConnection(ConnectionSPC id) {
+    EUDAQ_INFO("Processing Terminate command for connection ");
+    SendCommand("TERMINATE", "", id);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  
+  void RunControl::SendCommand(const std::string &cmd, const std::string &param,
+                               ConnectionSPC id){
+    std::unique_lock<std::mutex> lk(m_mtx_sendcmd);    
+    std::string packet(cmd);
+    if(param.length() > 0) {
+      packet += '\0' + param;
+    }
+    if(id)
+      m_cmdserver->SendPacket(packet, *id);
+    else
+      m_cmdserver->SendPacket(packet, ConnectionInfo::ALL);
+  }
 
    void RunControl::CommandThread() {
       while (!m_exit) {
@@ -289,10 +424,29 @@ namespace eudaq {
       }
    }
 
-   void RunControl::StatusThread() {
-      while (!m_exit) {
-         SendCommand("STATUS", "");
-         std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  void RunControl::StatusThread(){
+    while(!m_exit){
+      SendCommand("STATUS", "");
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // status/request update time of RunControl
+    }
+  }
+  
+  void RunControl::CommandHandler(TransportEvent &ev){
+    std::unique_lock<std::mutex> lk(m_mtx_conn);
+    auto con = ev.id;
+    switch (ev.etype){
+    case(TransportEvent::CONNECT):
+      if(m_listening){
+	EUDAQ_INFO(std::string("Connect:    ") + con->GetName());
+	std::string msg = "OK EUDAQ CMD RunControl " + con->GetRemote();
+        m_cmdserver->SendPacket(msg.c_str(), *con, true);
+	m_conn_status[con].reset();
+      } else {
+	EUDAQ_INFO(std::string("Refused connect:    ") + con->GetName());
+        m_cmdserver->SendPacket("ERROR EUDAQ CMD Not accepting new connections",
+                                *con, true);
+        m_cmdserver->Close(*con);
+	m_conn_status.erase(con);
       }
    }
 
