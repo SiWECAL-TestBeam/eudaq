@@ -1077,7 +1077,7 @@ namespace eudaq {
          int bxididx = e_sizeLdaHeader + length - 6 - memCell * 2;
 //         int bxididx = e_sizeLdaHeader + length - 4 - (memCell) * 2;
          int bxid = ((unsigned char) buf[bxididx + 1] << 8) | ((unsigned char) buf[bxididx]);
-//         bxid = grayRecode(bxid);
+         bxid = grayRecode(bxid);
 //         std::cout << "#>>DEBUG idx=" << bxididx << "\tbxid=" << bxid << "\tcell=" << memCell << "\tfilled=" << MemoryCellsFilled << std::endl;
          if (bxid > previousBxid) {
             EUDAQ_ERROR("BXID not in sequence. " + to_string(previousBxid) + " after " + to_string(bxid) + ". ROC=" + to_string(_cycleNo) + " port=" + to_string(LDA_Header_port)
@@ -1091,10 +1091,10 @@ namespace eudaq {
                MaxBxid[_cycleNo] = bxid;
             }
          }
-         if (bxid > 4096) {
-            std::cout << "ERROR: processing too high BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
-            EUDAQ_WARN(" bxid = " + to_string(bxid));
-         }
+         // if (bxid > 4096) {
+         //    std::cout << "ERROR: processing too high BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
+         //    EUDAQ_WARN(" bxid = " + to_string(bxid));
+         // }
          if (bxid < _producer->getMinimumBxid()) continue; //BXID==0 has a TDC bug -> discard!
          vector<unsigned short> adc, tdc;
 

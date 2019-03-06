@@ -483,9 +483,9 @@ int CaliceEasirocProducer::ADCOneCycle_wHeader(Exchanger* exchange, std::ofstrea
       ev->SetTag("TDC", m_lastTDCVal);
       ev->SetTag("SRC", GetName());
       ev->SetEventN(++m_lastEventN);
-      if ((((int) m_lastTDCVal - m_AHCALBXID0Offset) / m_AHCALBXIDWidth) > 10000) {
-         std::cout << "#too big BXID: ROC=" << m_lastCycleN << ", BXID=" << (m_lastTDCVal - m_AHCALBXID0Offset) / m_AHCALBXIDWidth << std::endl;
-      }
+      // if ((((int) m_lastTDCVal - m_AHCALBXID0Offset) / m_AHCALBXIDWidth) > 10000) {
+      //    std::cout << "#too big BXID: ROC=" << m_lastCycleN << ", BXID=" << (m_lastTDCVal - m_AHCALBXID0Offset) / m_AHCALBXIDWidth << std::endl;
+      // }
       //TODO ev->SetDeviceN(1);
       ev->AddBlock(3, DataBuffer, TotalRecvByte);
       if (m_lastTrigN == 0) ev->SetBORE();
