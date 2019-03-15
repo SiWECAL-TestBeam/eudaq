@@ -34,7 +34,10 @@ namespace eudaq {
       _LDATimestampData.clear();
       _RunTimesStatistics.clear();
       _DaqErrors.clear();
-      MaxBxid.clear();
+
+      minLastBxid_Detector.clear();
+      _stoppingBxidPerAsic.clear();
+      minLastBxid_Asic.clear();
       slowcontrol.clear();
       ledInfo.clear();
       _unfinishedPacketState = UnfinishedPacketStates::DONE;
@@ -453,6 +456,7 @@ namespace eudaq {
       ev->AddBlock(4, vector<int>()); // dummy block to be filled later with LED information (only if LED run)
       ev->AddBlock(5, vector<int>()); // dummy block to be filled later with temperature
       ev->AddBlock(6, vector<uint32_t>()); // dummy block to be filled later with cycledata(start, stop, trigger)
+      ev->AddBlock(7, std::vector<std::pair<int,int>>()); //to be filled with info on stopping bxid per Asic
       appendOtherInfo(ev);
    }
 
@@ -515,13 +519,13 @@ namespace eudaq {
             //there might be more external triggerIDs within one BXID, therefore we iterate over everything within the bxid
             for (std::multimap<int, std::tuple<int, uint64_t> >::iterator trigIt = triggerBxids.find(bxid); trigIt != triggerBxids.end(); trigIt = triggerBxids.find(bxid)) {
                //check whether the bxid is not from the time after the last memory cell was filled somewhere:
-               if (MaxBxid.count(roc)) {
-                  if (bxid > MaxBxid[roc]) {
+               if (minLastBxid_Detector.count(roc)) {
+                  if (bxid > minLastBxid_Detector[roc]) {
                      int asic = sameBxidPackets.second[0][3] & 0xFF;
                      int module = (sameBxidPackets.second[0][3] >> 8) & 0xFF;
-                     std::cout << "Info: skipped BXID="<<bxid<<" in ROC=" << roc << ". Another layer got full at bxid=" << MaxBxid[roc] << std::endl;
-                     if (bxid > (MaxBxid[roc] + 4)) {
-                        EUDAQ_ERROR_STREAMOUT("BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(MaxBxid[roc]) + "). ROC="
+                     std::cout << "Info: skipped BXID="<<bxid<<" in ROC=" << roc << ". Another layer got full at bxid=" << minLastBxid_Detector[roc] << std::endl;
+                     if (bxid > (minLastBxid_Detector[roc] + 4)) {
+                        EUDAQ_ERROR_STREAMOUT("BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC="
                               + to_string(roc) + " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
                      }
                      break; //throw away potentially incomplete bxid, because previous bxid has ben reached by some memory cell 16
@@ -542,11 +546,34 @@ namespace eudaq {
                nev->SetTag("BXID", bxid);
                nev->SetTag("ROCStartTS", startTS);
                nev->SetTag("TrigBxidTdc", (int) ((trigTS - startTS - _producer->getAhcalbxid0Offset()) % _producer->getAhcalbxidWidth()));
+
+
+               //calculateEventTimestamp
+
+              // std::cout<<"trigger: "<<trigTS<<std::endl;
+
+               //std::cout<<"tbtimestamp"<<getTbTimestamp()<<std::endl;
+              uint64_t tbTimestamp =  (uint64_t) this->getTbTimestamp();
+              uint64_t trigTsGlob = tbTimestamp * 1000000000+trigTS*25;
+            //  std::cout<<tbTimestamp<<std::endl;
+              nev->SetTag("tbTimestamp", tbTimestamp);
+              nev->SetTag("LDATS_Low", trigTS*25 & 0x00000000FFFFFFFF);
+              nev->SetTag("LDATS_High", trigTS*25 >> 32);
+               //
+              //  uint32_t ldats_high= nev->GetTag("LDATS_High",1);
+              //  uint32_t ldats_low= nev->GetTag("LDATS_Low",1);
+               //
+              //  uint64_t ldats = (uint64_t) ldats_high << 32 | (uint64_t)ldats_low;
+              //  std::cout<<"LDATS: "<<(ldats*25)/1000000000<<std::endl;
+              //  std::cout<<"trigts: "<<(trigTS*25)/1000000000<<std::endl;
+              //std::cout<<"BXID: "<<bxid<<std::endl;
+            //   std::cout<<"-------------------"<<std::endl;
                nev->SetTriggerN(rawTrigId - _producer->getLdaTrigidOffset());
                if (startTS && (!_producer->getIgnoreLdaTimestamps())) {
                   uint64_t ts_beg = startTS + _producer->getAhcalbxid0Offset() + bxid * _producer->getAhcalbxidWidth() - 1;
                   uint64_t ts_end = startTS + _producer->getAhcalbxid0Offset() + (bxid + 1) * _producer->getAhcalbxidWidth() + 1;
-                  nev->SetTimestamp(ts_beg, ts_end, true);               //false?
+                  nev->SetTimestamp(trigTsGlob, ts_end, true);               //false?
+                //  std::cout<<"LDATS: "<<ts_beg<<std::endl;
                }
                std::vector<uint32_t> cycledata;
                cycledata.push_back((uint32_t) (startTS));
@@ -562,6 +589,42 @@ namespace eudaq {
                   trigIt = triggerBxids.find(bxid);
                }
                nev_raw->AppendBlock(6, cycledata);
+
+               std::vector<std::pair<int,int> > stoppingBxidData;
+
+               std::map<int,std::map<int,int>>::iterator it;
+               it = _stoppingBxidPerAsic.find(roc);
+              //  if(it == _stoppingBxidPerAsic.end()){
+              //    std::cout<<"roc data not found!"<<std::endl;
+              //  }
+
+
+               std::map<int,std::map<int,int>>::iterator it2;
+               it2 = minLastBxid_Asic.find(roc);
+
+               if(it2 == minLastBxid_Asic.end()){         //if roc is not in the map (roc was not ended by memCell 15)
+                 //std::cout<<"roc"<< roc<<" not ended by full memcell"<<std::endl;
+                 stoppingBxidData.push_back(std::make_pair(-1,-1));
+               }
+               else{
+                 int tmp = 65535;
+                 std::pair<int,int> tmpPair;
+                 for(auto const &i: it2->second){           //if roc is in the map, find asic with lowest bxid with memCell 15
+
+                   if(i.second < tmp){
+                     tmp=i.second;
+                     tmpPair= std::make_pair(i.first,i.second );
+
+                   }
+                 }
+                 stoppingBxidData.push_back(tmpPair);     //first pair in vector gives asic and min bxid with memCell 15
+
+                 for(auto const &i : it->second){         //fill vector with highest bxid of all other asics in this roc
+                   stoppingBxidData.push_back(std::make_pair(i.first, i.second));
+                 }
+               }
+
+               nev_raw->AppendBlock(7, stoppingBxidData);
 
                switch (_producer->getEventNumberingPreference()) {
                   case AHCALProducer::EventNumbering::TRIGGERID:
@@ -737,12 +800,12 @@ namespace eudaq {
 //data from the readoutcycle to be sorted by BXID.
          for (std::vector<int> &dit : data) { // = data.begin(); dit != data.end(); ++dit
             int bxid = (int) dit[1];
-            if (MaxBxid.count(roc)) {
-               if (bxid > (MaxBxid[roc] + 4)) {
-                  EUDAQ_ERROR_STREAMOUT("BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(MaxBxid[roc]) + "). ROC="
+            if (minLastBxid_Detector.count(roc)) {
+               if (bxid > (minLastBxid_Detector[roc] + 4)) {
+                  EUDAQ_ERROR_STREAMOUT("BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC="
                         + to_string(roc) + " ASIC=" + to_string(dit[3] & 0xFF) + " Module=" + to_string(dit[3] >> 8), std::cout, std::cerr);
                }
-               if (bxid > MaxBxid[roc]) {
+               if (bxid > minLastBxid_Detector[roc]) {
                   continue; //throw away potentially incomplete bxid, because previous bxid has ben reached by some memory cell 16
                }
             }
@@ -1060,6 +1123,7 @@ namespace eudaq {
       }
 
       int chipId = (unsigned char) buffer_it[length - 3] * 256 + (unsigned char) buffer_it[length - 4];
+      int chipId_noLDA = chipId;
       const int NChannel = 36;
       int MemoryCellsFilled = (length - 8) / (NChannel * 4 + 2);      //number of memory cells
       uint8_t difId = buffer_it[6];
@@ -1085,16 +1149,38 @@ namespace eudaq {
          }
          previousBxid = bxid;
          if (memCell == 15) { //last memory cell = stop of the cycle is issued
-            if (MaxBxid[_cycleNo]) {
-               if (MaxBxid[_cycleNo] > bxid) MaxBxid[_cycleNo] = bxid; //update to the most restricting value
+            if (minLastBxid_Detector[_cycleNo]) {
+               if (minLastBxid_Detector[_cycleNo] > bxid) minLastBxid_Detector[_cycleNo] = bxid; //update to the most restricting value
             } else { //not initialized for this readout cycle
-               MaxBxid[_cycleNo] = bxid;
+               minLastBxid_Detector[_cycleNo] = bxid;
             }
+
+            //look if cycle was already treated before
+           std::map<int ,int> &tmpMap = minLastBxid_Asic.insert({ _cycleNo, std::map<int ,int >() }).first->second;
+           //find if difID in this cycle has occured before
+
+           auto tmpBxid = tmpMap.insert({chipId,bxid});
+
+           if(tmpBxid.second == false ){
+             if(tmpBxid.first->second  > bxid){tmpMap.at(chipId) = bxid;}
          }
-         // if (bxid > 4096) {
-         //    std::cout << "ERROR: processing too high BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
-         //    EUDAQ_WARN(" bxid = " + to_string(bxid));
-         // }
+
+         }
+
+         std::map<int,int> &tmpAsic  =
+         _stoppingBxidPerAsic.insert({_cycleNo, std::map< int,int >()}).first->second;
+
+         auto tmpChip = tmpAsic.insert({chipId, bxid});
+
+         if(tmpChip.second == false){
+           if(tmpChip.first->second < bxid){tmpAsic.at(chipId) = bxid;}
+         }
+
+
+         if (bxid > 4096) {
+            std::cout << "ERROR: processing too high BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
+            EUDAQ_WARN(" bxid = " + to_string(bxid));
+         }
          if (bxid < _producer->getMinimumBxid()) continue; //BXID==0 has a TDC bug -> discard!
          vector<unsigned short> adc, tdc;
 
@@ -1439,6 +1525,15 @@ namespace eudaq {
       }
       newvalue = (newvalue & (~mask)) | (newCntModulo & mask);
       return newvalue;
+   }
+
+   void ScReader::setTbTimestamp( uint32_t ts)
+   {
+     _timestampTbCampaign = ts;
+   }
+  uint32_t ScReader::getTbTimestamp() const
+  {
+    return _timestampTbCampaign;
    }
 
    uint16_t ScReader::grayRecode(const uint16_t partiallyDecoded) {

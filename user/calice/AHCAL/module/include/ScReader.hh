@@ -22,6 +22,9 @@ namespace eudaq {
                bool newForced);
          virtual void readTemperature(std::deque<char>& buf);
 
+         virtual void setTbTimestamp(uint32_t ts) override;
+         virtual uint32_t getTbTimestamp() const override;
+
          int updateCntModulo(const int oldCnt, const int newCntModulo, const int bits, const int maxBack);
          void appendOtherInfo(eudaq::RawEvent * ev);
 
@@ -128,6 +131,7 @@ namespace eudaq {
          std::vector<uint32_t> cycleData;
 
          int _lastBuiltEventNr;            //last event number for keeping track of missed events in the stream (either ROC, trigger number or arbitrary number)
+         int _lastROC;
 
          std::map<int, LDATimeData> _LDATimestampData; //maps READOUTCYCLE to LDA timestamps for that cycle (comes asynchronously with the data and tends to arrive before the ASIC packets)
 
@@ -135,7 +139,16 @@ namespace eudaq {
 
          std::map<int, int> _DaqErrors;              // <ReadoutCycleNumber, ErrorMask> if errormas is 0, everything is OK
 
-         std::map<int,int> MaxBxid;//stores the lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
+         std::map<int,int> minLastBxid_Detector;//stores the minimum! lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
+                                                //throughout the Detector
+
+         std::map<int, std::map<int,int> >  minLastBxid_Asic;
+
+
+         std::map<int, std::map< int, int > > _stoppingBxidPerAsic;
+
+
+         uint32_t _timestampTbCampaign;
 
          RunTimeStatistics _RunTimesStatistics;
    }

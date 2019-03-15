@@ -53,8 +53,32 @@ namespace eudaq {
       // try to cast the Event
       auto& source = *(d1.get());
       auto& result = *(d2.get());
+      //
+      uint64_t tbTimestamp= source.GetTag("tbTimestamp",0);
+
+      auto bl0 = source.GetBlock(0);
+      string colName((char *) &bl0.front(), bl0.size());
+      if(tbTimestamp > 0){
+        if (colName == "EUDAQDataBIF"){
+
+          uint64_t ts = source.GetTimestampBegin();
+          uint64_t eventTsNanoSeconds = tbTimestamp*1000000000+(ts*25);
+          result.setTimeStamp(eventTsNanoSeconds);
+        }
+        if (colName == "EUDAQDataScCAL"){
+          double ts = source.GetTimestampBegin();
+          uint64_t eventTsNanoSeconds = tbTimestamp*1000000000+(ts*0.78125);
+          result.setTimeStamp(eventTsNanoSeconds);
+        }
+
+      }
+      else{
       LCTime now;
       result.setTimeStamp(now.timeStamp());
+      }
+
+      // LCTime now;
+      // std::cout<<"timestampNow: "<<now.timeStamp()<<std::endl;
 
       if (source.IsBORE()) std::cout<<"DEBUG BORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
       if (source.IsEORE()) std::cout<<"DEBUG EORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
@@ -73,7 +97,11 @@ namespace eudaq {
       }
 
       // no contents -ignore
-      if (rawev->NumBlocks() < 2) return true;
+      if (rawev->NumBlocks() < 2) {
+        //std::cout<<"!!!!!"<<std::endl;
+
+        return true;
+      }
 
       unsigned int nblock = 0;
 
@@ -92,6 +120,8 @@ namespace eudaq {
          // EUDAQ TIMESTAMP, saved in ScReader.cc
          auto bl2 = rawev->GetBlock(nblock++);
          time_t timestamp = *(unsigned int *) (&bl2[0]);
+         //std::cout<<timestamp<<std::endl;
+         //std::cout<<"colName: "<<colName<<", DataDesc: "<<dataDesc<<std::endl;
 
          //	IMPL::LCEventImpl  & lcevent = dynamic_cast<IMPL::LCEventImpl&>(result);
          //	lcevent.setTimeStamp((long int)&bl2[0]);
@@ -156,6 +186,13 @@ namespace eudaq {
                getScCALTemperatureSubEvent(bl5, col);
             }
 
+            nblock++;
+            auto bl7 = rawev->GetBlock(7);
+            if(bl7.size()>0){
+              LCCollectionVec *col = 0;
+              col = createCollectionVec(result, "ASICStopData", "[i:asic(memCell 15),i:lowest bxid(memCell15)],[[i:asic, i:stop bxid in asic],[],...]", timestamp, DAQquality);
+              getDataLCIOGenericObject(bl7, col,nblock);
+            }
             // //-------------------
             // // READ/WRITE Timestamps
             // //the  block=6, if non empty,

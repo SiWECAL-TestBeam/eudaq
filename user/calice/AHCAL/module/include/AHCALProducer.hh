@@ -31,6 +31,10 @@ namespace eudaq {
          }
          virtual ~AHCALReader() {
          }
+
+         virtual void setTbTimestamp( uint32_t ts){}
+         virtual uint32_t getTbTimestamp() const{}
+
       public:
          std::mutex _eventBuildingQueueMutex;
 

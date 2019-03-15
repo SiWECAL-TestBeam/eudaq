@@ -99,6 +99,11 @@ void AHCALProducer::DoConfigure() {
    _minimumBxid = param.Get("MinimumBxid", 0);
    _minEventHits = param.Get("MinimumEventHits", 1);
 
+   uint32_t timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
+
+   _reader->setTbTimestamp(timestampTbCampaign);
+  // std::cout<<"timestamp of TB campaign: "<<_timestampTbCampaign<<std::endl;
+
    string eventBuildingMode = param.Get("EventBuildingMode", "ROC");
    if (!eventBuildingMode.compare("ROC")) _eventBuildingMode = AHCALProducer::EventBuildingMode::ROC;
    if (!eventBuildingMode.compare("TRIGGERID")) _eventBuildingMode = AHCALProducer::EventBuildingMode::TRIGGERID;
