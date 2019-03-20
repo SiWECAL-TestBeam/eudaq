@@ -526,11 +526,12 @@ namespace eudaq {
                uint64_t trigTS = std::get<1>(trigIt->second);               //get the trigger timestamp from the iterator
                while ((_producer->getInsertDummyPackets()) && (++_lastBuiltEventNr < (rawTrigId - _producer->getLdaTrigidOffset()))) {
                   //std::cout << "WARNING EB: inserting a dummy trigger: " << _lastBuiltEventNr << ", because " << _LDATimestampData[roc].TriggerIDs[i] << " is next" << std::endl;
-                  insertDummyEvent(EventQueue, -1, _lastBuiltEventNr, false);
+                  insertDummyEvent(EventQueue, _lastBuiltEventNr, _lastBuiltEventNr - _producer->getLdaTrigidOffset(), false);
                }
                eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
                eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
                prepareEudaqRawPacket(nev_raw);
+	       //nev->SetEventN(_lastBuiltEventNr);
                nev->SetTag("ROC", roc);
                nev->SetTag("BXID", bxid);
                nev->SetTag("ROCStartTS", startTS);
