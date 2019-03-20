@@ -97,7 +97,7 @@ void AHCALProducer::DoConfigure() {
    _ChipidAddAfterMasking = param.Get("ChipidAddAfterMasking", 0);
    _AppendDifidToChipidBitPosition = param.Get("AppendDifidToChipidBitPosition", -1);
    _minimumBxid = param.Get("MinimumBxid", 0);
-   _minEventHits = param.Get("MinimumEventHits", 1);
+   _minEventHits = param.Get("MinimumEventHits", 0);
 
    string eventBuildingMode = param.Get("EventBuildingMode", "ROC");
    if (!eventBuildingMode.compare("ROC")) _eventBuildingMode = AHCALProducer::EventBuildingMode::ROC;
