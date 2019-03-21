@@ -31,6 +31,8 @@ class DesyTableProducer: public eudaq::Producer {
       std::string controllerSetup;//configuration of the counter. I can be then added as a TAG to the stream
       std::chrono::duration<float> readInterval;
       std::chrono::duration<float> checkStabilitySeconds;
+      uint8_t horizontalAddress;
+      uint8_t verticalAddress;
 };
 
 #endif // DESYTABLEPRODUCER_HH

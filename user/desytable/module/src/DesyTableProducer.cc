@@ -17,8 +17,7 @@
 #include "DesyTableCommunication.hh"
 
 namespace {
-   auto dummy0 = eudaq::Factory<eudaq::Producer>::
-         Register<DesyTableProducer, const std::string&, const std::string&>(DesyTableProducer::m_id_factory);
+auto dummy0 = eudaq::Factory<eudaq::Producer>::Register<DesyTableProducer, const std::string&, const std::string&>(DesyTableProducer::m_id_factory);
 }
 DesyTableProducer::DesyTableProducer(const std::string & name, const std::string & runcontrol) :
       eudaq::Producer(name, runcontrol), m_exit_of_run(false) {
@@ -28,6 +27,14 @@ void DesyTableProducer::DoInitialise() {
    auto ini = GetInitConfiguration();
    m_comm = std::unique_ptr<DesyTableCommunication>(new DesyTableCommunication(ini->Get("IP_ADDRESS", "192.168.1.66"), ini->Get("TCP_PORT", 8000)));
    std::cout << "communication module loaded" << std::endl;
+   horizontalAddress = ini->Get("HORIZONTAL_ADDRESS", 0);
+   verticalAddress= ini->Get("VERTICAL_ADDRESS", 1);
+   if (horizontalAddress==verticalAddress){
+      EUDAQ_ERROR_STREAMOUT("Wrong setting of addresses. Both counters cannot have same address", std::cout, std::cerr);
+      //change the addresses to something hopefully unmeaningful.
+      horizontalAddress=100;
+      verticalAddress=101;
+   }
    m_comm->setDebugLevel(ini->Get("DEBUG_VERBOSITY_LEVEL", 0));
    m_comm->setMmToBins(ini->Get("MM_TO_BINS", 10.0));
 //   std::cout << "DEBUG: doinit 1" << std::endl;
@@ -35,7 +42,7 @@ void DesyTableProducer::DoInitialise() {
    //setting P1 to current posotion enables switching on of the automatic steering on the remote controller (there is a mechanical switch, which switches only when P1==C1
    if (ini->Get("RESET_P1_TO_ACTUAL_POSITION", 0)) {
       EUDAQ_INFO_STREAMOUT("Setting P1 to C1", std::cout, std::cerr);
-      for (uint8_t address = 0; address < 2; address++) {
+      for (uint8_t address = 0; address < 2; address++) { //loop over 2 sub-devices
          int position = m_comm->getActualPosition(address);
          m_comm->getActualPositionmm(address);
          std::cout << "Read position = " << position << std::endl;
@@ -83,11 +90,11 @@ void DesyTableProducer::DoConfigure() {
 
    double h_slow_mm = conf->Get("HORIZONTAL_SLOW_LENGTH_MM", 0.0);
    if (h_slow_mm < 0.01) h_slow_mm = conf->Get("HORIZONTAL_SLOW_LENGTH_RAW", 0.0) / m_comm->getMmToBins();
-   if (h_slow_mm > 0.01) m_comm->setPresetP5mm(h_slow_mm, 0); //send only values > 0
+   if (h_slow_mm > 0.01) m_comm->setPresetP5mm(h_slow_mm, horizontalAddress); //send only values > 0
 
    double v_slow_mm = conf->Get("VERTICAL_SLOW_LENGTH_MM", 0.0);
    if (v_slow_mm < 0.01) v_slow_mm = conf->Get("VERTICAL_SLOW_LENGTH_RAW", 0.0) / m_comm->getMmToBins();
-   if (v_slow_mm > 0.01) m_comm->setPresetP5mm(h_slow_mm, 1); //send only values > 0
+   if (v_slow_mm > 0.01) m_comm->setPresetP5mm(h_slow_mm, verticalAddress); //send only values > 0
 
    double h_pos_mm = conf->Get("HORIZONTAL_POSITION_MM", invalid);
 //   std::cout << "HORIZONTAL_POSITION_MM = " << h_pos_mm << std::endl;
@@ -111,14 +118,12 @@ void DesyTableProducer::DoConfigure() {
    if (v_approach_mm >= cinvalid) v_approach_mm == (v_approach_raw >= cinvalid) ? invalid : v_approach_raw / m_comm->getMmToBins();
    if (v_approach_mm <= 0.01) v_approach_mm = invalid;
    if ((h_approach_mm < cinvalid) && (h_pos_mm < cinvalid)) {
-      EUDAQ_INFO_STREAMOUT("Preparing for the approach position H=" + std::to_string(h_pos_mm + h_approach_mm) + "mm (pos="
-            + std::to_string(h_pos_mm) + "mm,approach=" + std::to_string(h_approach_mm) + ")", std::cout, std::cerr);
-      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm, 0);
+      EUDAQ_INFO_STREAMOUT("Preparing for the approach position H=" + std::to_string(h_pos_mm + h_approach_mm) + "mm (pos=" + std::to_string(h_pos_mm) + "mm,approach=" + std::to_string(h_approach_mm) + ")", std::cout, std::cerr);
+      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm, horizontalAddress);
    }
    if ((v_approach_mm < cinvalid) && (v_pos_mm < cinvalid)) {
-      EUDAQ_INFO_STREAMOUT("Preparing for the approach position V=" + std::to_string(v_pos_mm + v_approach_mm) + "mm (pos="
-            + std::to_string(v_pos_mm) + "mm,approach=" + std::to_string(v_approach_mm) + ")", std::cout, std::cerr);
-      m_comm->setPresetP1mm(v_pos_mm + v_approach_mm, 1);
+      EUDAQ_INFO_STREAMOUT("Preparing for the approach position V=" + std::to_string(v_pos_mm + v_approach_mm) + "mm (pos=" + std::to_string(v_pos_mm) + "mm,approach=" + std::to_string(v_approach_mm) + ")", std::cout, std::cerr);
+      m_comm->setPresetP1mm(v_pos_mm + v_approach_mm, verticalAddress);
    }
    //wait for the stable position
    if (((h_approach_mm < cinvalid) && (h_pos_mm < cinvalid)) || ((v_approach_mm < cinvalid) && (v_pos_mm < cinvalid))) {
@@ -129,8 +134,8 @@ void DesyTableProducer::DoConfigure() {
       bool done = false;
       while (!done) {
          std::cout << "DEBUG mark 7" << std::endl;
-         double h_mm = m_comm->getActualPositionmm(0);
-         double v_mm = m_comm->getActualPositionmm(1);
+         double h_mm = m_comm->getActualPositionmm(horizontalAddress);
+         double v_mm = m_comm->getActualPositionmm(verticalAddress);
          if ((abs(last_h_mm - h_mm) > 0.05) || (abs(last_v_mm - v_mm) > 0.05)) {
             last_h_mm = h_mm;
             last_v_mm = v_mm;
@@ -145,18 +150,17 @@ void DesyTableProducer::DoConfigure() {
          }
       }
    } else {
-      EUDAQ_INFO_STREAMOUT("No approch position set" + std::to_string(h_pos_mm + h_approach_mm) + "mm (pos="
-            + std::to_string(h_pos_mm) + "mm,approach=" + std::to_string(h_approach_mm) + ")", std::cout, std::cerr);
-      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm, 0);
+      EUDAQ_INFO_STREAMOUT("No approch position set" + std::to_string(h_pos_mm + h_approach_mm) + "mm (pos=" + std::to_string(h_pos_mm) + "mm,approach=" + std::to_string(h_approach_mm) + ")", std::cout, std::cerr);
+      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm,horizontalAddress);
    }
    //set the final position
    if (h_pos_mm < cinvalid) {
       EUDAQ_INFO_STREAMOUT("Setting the table position H=" + std::to_string(h_pos_mm) + "mm", std::cout, std::cerr);
-      m_comm->setPresetP1mm(h_pos_mm, 0);
+      m_comm->setPresetP1mm(h_pos_mm, horizontalAddress);
    }
    if (v_pos_mm < cinvalid) {
       EUDAQ_INFO_STREAMOUT("Setting the table position V=" + std::to_string(v_pos_mm) + "mm", std::cout, std::cerr);
-      m_comm->setPresetP1mm(v_pos_mm, 1);
+      m_comm->setPresetP1mm(v_pos_mm, verticalAddress);
    }
    //wait for the stable position
    if ((h_pos_mm < cinvalid) || (v_pos_mm < cinvalid)) {
@@ -166,8 +170,8 @@ void DesyTableProducer::DoConfigure() {
       double last_v_mm = 0.0;
       bool done = false;
       while (!done) {
-         double h_mm = m_comm->getActualPositionmm(0);
-         double v_mm = m_comm->getActualPositionmm(1);
+         double h_mm = m_comm->getActualPositionmm(horizontalAddress);
+         double v_mm = m_comm->getActualPositionmm(verticalAddress);
          if ((abs(last_h_mm - h_mm) > 0.05) || (abs(last_v_mm - v_mm) > 0.05)) {
             last_h_mm = h_mm;
             last_v_mm = v_mm;
@@ -215,8 +219,8 @@ void DesyTableProducer::RunLoop() {
    bool firstCycle = true;
    while (!m_exit_of_run) {
       m_comm->trashRecvBuffer();
-      double h_mm = m_comm->getActualPositionmm(0);
-      double v_mm = m_comm->getActualPositionmm(1);
+      double h_mm = m_comm->getActualPositionmm(horizontalAddress);
+      double v_mm = m_comm->getActualPositionmm(verticalAddress);
       if ((firstCycle) || (std::chrono::duration<double>(std::chrono::steady_clock::now() - tp_readout) > readInterval)) {
          firstCycle = false;
          tp_readout = std::chrono::steady_clock::now();
