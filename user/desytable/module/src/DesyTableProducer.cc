@@ -28,12 +28,12 @@ void DesyTableProducer::DoInitialise() {
    m_comm = std::unique_ptr<DesyTableCommunication>(new DesyTableCommunication(ini->Get("IP_ADDRESS", "192.168.1.66"), ini->Get("TCP_PORT", 8000)));
    std::cout << "communication module loaded" << std::endl;
    horizontalAddress = ini->Get("HORIZONTAL_ADDRESS", 0);
-   verticalAddress= ini->Get("VERTICAL_ADDRESS", 1);
-   if (horizontalAddress==verticalAddress){
+   verticalAddress = ini->Get("VERTICAL_ADDRESS", 1);
+   if (horizontalAddress == verticalAddress) {
       EUDAQ_ERROR_STREAMOUT("Wrong setting of addresses. Both counters cannot have same address", std::cout, std::cerr);
       //change the addresses to something hopefully unmeaningful.
-      horizontalAddress=100;
-      verticalAddress=101;
+      horizontalAddress = 100;
+      verticalAddress = 101;
    }
    m_comm->setDebugLevel(ini->Get("DEBUG_VERBOSITY_LEVEL", 0));
    m_comm->setMmToBins(ini->Get("MM_TO_BINS", 10.0));
@@ -151,7 +151,7 @@ void DesyTableProducer::DoConfigure() {
       }
    } else {
       EUDAQ_INFO_STREAMOUT("No approch position set" + std::to_string(h_pos_mm + h_approach_mm) + "mm (pos=" + std::to_string(h_pos_mm) + "mm,approach=" + std::to_string(h_approach_mm) + ")", std::cout, std::cerr);
-      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm,horizontalAddress);
+      m_comm->setPresetP1mm(h_pos_mm + h_approach_mm, horizontalAddress);
    }
    //set the final position
    if (h_pos_mm < cinvalid) {
