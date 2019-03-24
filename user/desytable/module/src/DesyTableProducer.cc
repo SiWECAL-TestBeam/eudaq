@@ -133,7 +133,6 @@ void DesyTableProducer::DoConfigure() {
       double last_v_mm = 0.0;
       bool done = false;
       while (!done) {
-         std::cout << "DEBUG mark 7" << std::endl;
          double h_mm = m_comm->getActualPositionmm(horizontalAddress);
          double v_mm = m_comm->getActualPositionmm(verticalAddress);
          if ((abs(last_h_mm - h_mm) > 0.05) || (abs(last_v_mm - v_mm) > 0.05)) {
