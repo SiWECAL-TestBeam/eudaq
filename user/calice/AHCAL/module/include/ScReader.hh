@@ -41,6 +41,8 @@ namespace eudaq {
 //         }
          virtual ~ScReader();
 
+
+
          struct LDATimeData {
                uint64_t TS_Start; //start of acquisition
                uint64_t TS_Stop; //stop of acquisition
@@ -73,6 +75,7 @@ namespace eudaq {
          const ScReader::RunTimeStatistics& getRunTimesStatistics() const;
          unsigned int getCycleNo() const;
          unsigned int getTrigId() const;
+
          uint16_t grayRecode(const uint16_t partiallyDecoded);
 
       private:
@@ -145,15 +148,12 @@ namespace eudaq {
          std::map<int, std::map<int,int> >  minLastBxid_Asic;
 
 
-         std::map<int, std::map< int, int > > _stoppingBxidPerAsic;
 
 
          uint32_t _timestampTbCampaign;
 
          RunTimeStatistics _RunTimesStatistics;
-   }
-   ;
+   };
 }
 
 #endif // SCREADER_HH
-

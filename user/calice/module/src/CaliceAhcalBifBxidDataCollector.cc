@@ -4,21 +4,42 @@
 #include <deque>
 #include <map>
 #include <set>
+#include "eudaq/Utils.hh"
+#include <iostream>
+#include <ostream>
+#include <ctime>
+#include <iomanip>
+#include <cxxabi.h>
+
+
+#include "eudaq/CommandReceiver.hh"
+#include "eudaq/FileWriter.hh"
+#include "eudaq/DataSender.hh"
+#include "eudaq/DataReceiver.hh"
+#include "eudaq/Event.hh"
+#include "eudaq/Configuration.hh"
+#include "eudaq/Utils.hh"
+#include "eudaq/Platform.hh"
+#include "eudaq/Factory.hh"
+
+using namespace eudaq;
+using DataCollectorSP = Factory<DataCollector>::SP_BASE;
 
 class CaliceAhcalBifBxidDataCollector: public eudaq::DataCollector {
-   public:
-      CaliceAhcalBifBxidDataCollector(const std::string &name, const std::string &runcontrol);
-      void DoStartRun() override;
-      void DoConfigure() override;
-      void DoConnect(eudaq::ConnectionSPC id) override;
-      void DoDisconnect(eudaq::ConnectionSPC id) override;
-      void DoReceive(eudaq::ConnectionSPC id, eudaq::EventSP ev) override;
+public:
+   CaliceAhcalBifBxidDataCollector(const std::string &name, const std::string &runcontrol);
+   void DoStartRun() override;
+   void DoConfigure() override;
+   void DoConnect(eudaq::ConnectionSPC id) override;
+   void DoDisconnect(eudaq::ConnectionSPC id) override;
+   void DoReceive(eudaq::ConnectionSPC id, eudaq::EventSP ev) override;
 
-      static const uint32_t m_id_factory = eudaq::cstr2hash("CaliceAhcalBifBxidDataCollector");
+   static const uint32_t m_id_factory = eudaq::cstr2hash("CaliceAhcalBifBxidDataCollector");
 
-   private:
-      void AddEvent_TimeStamp(uint32_t id, eudaq::EventSPC ev);
-      void BuildEvent_bxid();
+private:
+   void AddEvent_TimeStamp(uint32_t id, eudaq::EventSPC ev);
+   void BuildEvent_bxid();
+
 
       std::mutex m_mutex;
       //to be edited according to the name of the processes. TODO implement as parameter to the configuration
@@ -78,6 +99,7 @@ CaliceAhcalBifBxidDataCollector::CaliceAhcalBifBxidDataCollector(const std::stri
       DataCollector(name, runcontrol) {
 }
 
+
 void CaliceAhcalBifBxidDataCollector::DoStartRun() {
    m_que_ahcal.clear();
    m_que_bif.clear();
@@ -91,18 +113,19 @@ void CaliceAhcalBifBxidDataCollector::DoStartRun() {
    m_ts_offset_ahcal2bif = 0;
    m_ev_n = 0;
    m_thrown_incomplete = 0;
+
 }
 
 void CaliceAhcalBifBxidDataCollector::DoConfigure() {
-   auto conf = GetConfiguration();
-   if (conf) {
-      conf->Print();
-      // m_pri_ts = conf->Get("PRIOR_TIMESTAMP", m_pri_ts?1:0);
-   }
-   int MandatoryBif = conf->Get("MandatoryBif", 1);
-   m_evt_mandatory_bif = (MandatoryBif == 1) ? true : false;
-   std::cout << "#MandatoryBif=" << MandatoryBif << std::endl;
-   lastprinttime = std::chrono::system_clock::now();
+  auto conf = GetConfiguration();
+  if (conf) {
+     conf->Print();
+     // m_pri_ts = conf->Get("PRIOR_TIMESTAMP", m_pri_ts?1:0);
+  }
+  int MandatoryBif = conf->Get("MandatoryBif", 1);
+  m_evt_mandatory_bif = (MandatoryBif == 1) ? true : false;
+  std::cout << "#MandatoryBif=" << MandatoryBif << std::endl;
+  lastprinttime = std::chrono::system_clock::now();
 }
 
 void CaliceAhcalBifBxidDataCollector::DoConnect(eudaq::ConnectionSPC idx) {
@@ -181,6 +204,16 @@ void CaliceAhcalBifBxidDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq:
    if (m_que_hodoscope2.empty() && m_active_hodoscope2) return;
 // std::cout<<"p 1 \n";
    BuildEvent_bxid();
+}
+
+
+
+DataCollectorSP DataCollector::Make(const std::string &code_name,
+            const std::string &run_name,
+            const std::string &runcontrol){
+  return Factory<DataCollector>::
+    MakeShared<const std::string&,const std::string&>
+    (eudaq::str2hash(code_name), run_name, runcontrol);
 }
 
 inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
@@ -334,8 +367,13 @@ inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
 
       auto ev_sync = eudaq::Event::MakeUnique("CaliceBxid");
       ev_sync->SetFlagPacket();
+      uint64_t timestampBegin, timestampEnd;
       if ((roc_ahcal == processedRoc) && (bxid_ahcal == processedBxid)) {
          if (!m_que_ahcal.empty()) {
+
+            timestampBegin= m_que_ahcal.front()->GetTimestampBegin();
+            timestampEnd=m_que_ahcal.front()->GetTimestampEnd();
+            ev_sync->SetTimestamp(timestampBegin,timestampEnd);
             ev_sync->AddSubEvent(std::move(m_que_ahcal.front()));
             m_que_ahcal.pop_front();
             present_ahcal = true;
@@ -379,6 +417,5 @@ inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
       m_thrown_incomplete -= 1; //and decrease back.
       ev_sync->SetEventN(m_ev_n++);
 //      ev_sync->Print(std::cout);
-      WriteEvent(std::move(ev_sync));
-   }
+      WriteEvent(std::move(ev_sync));   }
 }

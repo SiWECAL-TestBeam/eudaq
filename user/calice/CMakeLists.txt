@@ -1,7 +1,7 @@
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_LIST_DIR}/cmake)
 get_filename_component(EUDAQ_USERNAME ${CMAKE_CURRENT_LIST_DIR} NAME)
 set(EUDAQ_MODULE module_${EUDAQ_USERNAME})
-option(USER_CALICE_BUILD "build user/calice" OFF)
+option(USER_CALICE_BUILD "build user/calice" ON)
 if(NOT USER_CALICE_BUILD)
   message("user/calice is not to be built (USER_CALICE_BUILD=OFF)")
   unset(USER_CALICE_BUILD_AHCAL CACHE)

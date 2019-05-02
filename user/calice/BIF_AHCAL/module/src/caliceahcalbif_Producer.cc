@@ -33,6 +33,10 @@ class caliceahcalbifProducer: public eudaq::Producer {
 
       static const uint32_t m_id_factory = eudaq::cstr2hash("caliceahcalbifProducer");
       private:
+
+      uint32_t getTbTimestamp();
+      void setTbTimestamp(uint32_t ts);
+
       bool FetchBifDataWasSuccessfull();
       void ProcessQueuedBifData();
       void trigger_push_back(std::vector<uint32_t> &cycleData, const uint32_t type,
@@ -78,6 +82,8 @@ class caliceahcalbifProducer: public eudaq::Producer {
       uint64_t _acq_stop_ts; // timestamp of the stop of the acquisition
       uint32_t _acq_start_cycle; //raw cycle number of the acq start. Direct copy from the packet (no correction for starting the run from cycle 0
       uint32_t _trigger_id; //last trigger raw event number
+
+      uint32_t _timestampTbCampaign;
 
       std::vector<uint32_t> _cycleData; //data, that will be sent to eudaq rawEvent
       bool _ROC_started; //true when start acquisition was preceeding
@@ -131,6 +137,13 @@ caliceahcalbifProducer::caliceahcalbifProducer(const std::string name, const std
 //      std::this_thread::sleep_for(std::chrono::milliseconds(500));
 //   }
 //}
+
+uint32_t caliceahcalbifProducer::getTbTimestamp(){
+  return _timestampTbCampaign;
+}
+void caliceahcalbifProducer::setTbTimestamp(uint32_t ts){
+  _timestampTbCampaign = ts;
+}
 
 void caliceahcalbifProducer::RunLoop() {
    std::cout << "Main loop!" << std::endl;
@@ -202,6 +215,8 @@ void caliceahcalbifProducer::DoConfigure() {
    std::cout << "DEBUG bxid length in bins: " << _bxidLengthBins << std::endl;
    _WaitAfterStopSeconds = param.Get("WaitAfterStopSeconds", 1.0);
    _redirectedInputFileName = param.Get("RedirectInputFromFile", "");
+
+   _timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
 
    std::string eventBuildingMode = param.Get("EventBuildingMode", "ROC");
    if (!eventBuildingMode.compare("ROC")) _eventBuildingMode = caliceahcalbifProducer::EventBuildingMode::ROC;
@@ -784,6 +799,7 @@ void caliceahcalbifProducer::buildEudaqEventsTriggers(std::deque<eudaq::EventUP>
    for (auto trigger : trigger_packets) {
       auto ev = eudaq::Event::MakeUnique("CaliceObject");
       ev->SetTag("ROCStartTS", _acq_start_ts);
+      ev->SetTag("tbTimestamp", _timestampTbCampaign);
       std::string s = "EUDAQDataBIF";
       //auto CycleEvent = dynamic_cast<eudaq::RawEvent*>(ev.get());
       ev->AddBlock(0, s.c_str(), s.length());
@@ -930,6 +946,7 @@ void caliceahcalbifProducer::buildEudaqEventsBxid(std::deque<eudaq::EventUP>& de
    if (lastBxid != INT_MIN) {
       std::copy(stop_packet.begin(), stop_packet.end(), std::back_inserter(data));
       ev->AddBlock(6, data);
+      std::cout<<"here the timestamp"<<std::endl;
       deqEvent.push_back(std::move(ev));
    }
    data.clear();

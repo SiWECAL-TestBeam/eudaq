@@ -36,7 +36,6 @@ namespace eudaq {
       _DaqErrors.clear();
 
       minLastBxid_Detector.clear();
-      _stoppingBxidPerAsic.clear();
       minLastBxid_Asic.clear();
       slowcontrol.clear();
       ledInfo.clear();
@@ -116,6 +115,32 @@ namespace eudaq {
          std::cout << _LDATimestampData.rbegin()->first;
       else std::cout << "N/A";
       std::cout << std::endl;
+
+      // for(auto const &i : minLastBxid_Module){
+      //   //std::cout<<"-------Cycle: "<<i.first<< "---------"<<std::endl;
+      //   for(auto const &j :i.second){
+      //     //std::cout<<"difId: "<<j.first<< " ,bxid: "<<j.second<<std::endl;
+      //     differenceToMaxGlobal.push_back(globalMaxBxid.at(i.first) - j.second);
+      //
+      //     std::map<int,int> tmp = maxModuleBxid.at(i.first);
+      //     differenceToMaxLayer.push_back(tmp.at(j.first) - j.second);
+      //   }
+      // }
+      //
+      // FILE * diffGlobal = fopen("diffGlobal.txt", "w");
+      // for(auto &i : differenceToMaxGlobal){
+      //
+      //   fprintf(diffGlobal, "\n%d", i);
+      // }
+      // fclose(diffGlobal);
+      //
+      // FILE * diffModule = fopen("diffModule.txt", "w");
+      // for(auto &i : differenceToMaxLayer){
+      //
+      //   fprintf(diffModule, "\n%d", i);
+      // }
+      // fclose(diffModule);
+
 
       printLDAROCInfo(std::cout);
       //    usleep(000);
@@ -222,6 +247,8 @@ namespace eudaq {
 
                //read HV adjustemts
                if ((_unfinishedPacketState == UnfinishedPacketStates::DONE) && ((unsigned char) buf[0] == magic_hvadj[0])) {
+
+
 //                  std::cout << "Debug: trying to read HVADJ" << std::endl;
                   if (buf.size() < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                   if ((unsigned char) buf[1] == magic_hvadj[1]) {
@@ -234,6 +261,8 @@ namespace eudaq {
                         buf.erase(buf.begin(), buf.begin() + 1); //erase 1 byte
                         throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                      }
+
+
                      std::cout << "HVinfo: LDA=" << (unsigned int) buf[2] << " Port=" << (unsigned int) buf[3] << " Module=" << (unsigned int) buf[4]
                            << " HV1=" << (unsigned int) buf[6] << " HV2=" << (unsigned int) buf[7] << " HV3=" << (unsigned int) buf[7] << std::endl;
                      for (int i = 2; i < 10; i++) {
@@ -288,6 +317,7 @@ namespace eudaq {
             //(15) .. type: a readout packet (can be also temperature...)
             length = (((unsigned char) buf[3] << 8) + (unsigned char) buf[2]);      //*2;
             unsigned int LDA_Header_cycle = (unsigned char) buf[4];      //from LDA packet header - 8 bits only!
+            //std::cout<<"LDA_Header_cycle"<<std::endl;
             unsigned char status = buf[9];
             bool TempFlag = (status == 0xa0 && buf[10] == 0x41 && buf[11] == 0x43 && buf[12] == 0x7a && buf[13] == 0);
             bool TimestampFlag = (status == 0x08 && buf[10] == 0x45 && buf[11] == 0x4D && buf[12] == 0x49 && buf[13] == 0x54);
@@ -345,7 +375,13 @@ namespace eudaq {
                buf.pop_front();
             }
          }
+
+
+
       }
+
+
+
       catch (BufferProcessigExceptions &e) {
 //all data in buffer processed (or not enough data in the buffer)
 //std::cout << "DEBUG: MAP sizes: " << _LDAAsicData.size() << "\t" << _LDATimestampData.size();
@@ -355,7 +391,9 @@ namespace eudaq {
             case BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE:
                break;
             default:
+
                buildEvents(deqEvent, false);
+
                break;
          }
       } // throw if data short
@@ -451,6 +489,7 @@ namespace eudaq {
       unsigned int times[1];
       auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
       times[0] = std::chrono::duration_cast<std::chrono::seconds>(since_epoch).count();
+      //times[0]=1526342400;
       ev->AddBlock(2, times, sizeof(times));
       ev->AddBlock(3, vector<int>()); // dummy block to be filled later with slowcontrol files
       ev->AddBlock(4, vector<int>()); // dummy block to be filled later with LED information (only if LED run)
@@ -479,6 +518,7 @@ namespace eudaq {
 
          uint64_t startTS = 0LLU;
          uint64_t stopTS = 0LLU;
+
          //get the list of bxid for the triggerIDs timestamps
          std::multimap<int, std::tuple<int, uint64_t> > triggerBxids; //calculated_bxid, <triggerid, timestamp>
          if (_LDATimestampData.count(roc)) {
@@ -494,6 +534,8 @@ namespace eudaq {
                   colorPrint("\033[33;1m", "ERROR EB: Length of the acquisition is longer than 100 ms in ROC=" + to_string(roc));
                }
                uint64_t trigTS = _LDATimestampData[roc].TS_Triggers[i];
+               //std::cout<<"trigTS"<<trigTS<<std::endl;
+
                int bxid = ((int64_t) trigTS - (int64_t) startTS - (int64_t) _producer->getAhcalbxid0Offset()) / _producer->getAhcalbxidWidth();
 //               if ((bxid < 0) || (bxid > 4096)) std::cout << "\033[34mWARNING EB: calculated trigger bxid not in range: " << bxid << " in ROC " << roc << "\033[0m" << std::endl;
                int triggerId = _LDATimestampData[roc].TriggerIDs[i];
@@ -518,6 +560,7 @@ namespace eudaq {
             }
             //there might be more external triggerIDs within one BXID, therefore we iterate over everything within the bxid
             for (std::multimap<int, std::tuple<int, uint64_t> >::iterator trigIt = triggerBxids.find(bxid); trigIt != triggerBxids.end(); trigIt = triggerBxids.find(bxid)) {
+
                //check whether the bxid is not from the time after the last memory cell was filled somewhere:
                if (minLastBxid_Detector.count(roc)) {
                   if (bxid > minLastBxid_Detector[roc]) {
@@ -571,7 +614,7 @@ namespace eudaq {
                nev->SetTriggerN(rawTrigId - _producer->getLdaTrigidOffset());
                if (startTS && (!_producer->getIgnoreLdaTimestamps())) {
                   uint64_t ts_beg = startTS + _producer->getAhcalbxid0Offset() + bxid * _producer->getAhcalbxidWidth() - 1;
-                  uint64_t ts_end = startTS + _producer->getAhcalbxid0Offset() + (bxid + 1) * _producer->getAhcalbxidWidth() + 1;
+                  uint64_t ts_end = trigTsGlob +  _producer->getAhcalbxidWidth() + 1;
                   nev->SetTimestamp(trigTsGlob, ts_end, true);               //false?
                 //  std::cout<<"LDATS: "<<ts_beg<<std::endl;
                }
@@ -592,11 +635,7 @@ namespace eudaq {
 
                std::vector<std::pair<int,int> > stoppingBxidData;
 
-               std::map<int,std::map<int,int>>::iterator it;
-               it = _stoppingBxidPerAsic.find(roc);
-              //  if(it == _stoppingBxidPerAsic.end()){
-              //    std::cout<<"roc data not found!"<<std::endl;
-              //  }
+
 
 
                std::map<int,std::map<int,int>>::iterator it2;
@@ -619,10 +658,9 @@ namespace eudaq {
                  }
                  stoppingBxidData.push_back(tmpPair);     //first pair in vector gives asic and min bxid with memCell 15
 
-                 for(auto const &i : it->second){         //fill vector with highest bxid of all other asics in this roc
-                   stoppingBxidData.push_back(std::make_pair(i.first, i.second));
+
                  }
-               }
+
 
                nev_raw->AppendBlock(7, stoppingBxidData);
 
@@ -1148,6 +1186,8 @@ namespace eudaq {
                   + " Module=" + to_string((unsigned int )difId) + " Asic_index(from0)=" + to_string(chipId & 0xFF) + " Memory=" + to_string(MemoryCellsFilled - memCell - 1));
          }
          previousBxid = bxid;
+
+
          if (memCell == 15) { //last memory cell = stop of the cycle is issued
             if (minLastBxid_Detector[_cycleNo]) {
                if (minLastBxid_Detector[_cycleNo] > bxid) minLastBxid_Detector[_cycleNo] = bxid; //update to the most restricting value
@@ -1163,17 +1203,8 @@ namespace eudaq {
 
            if(tmpBxid.second == false ){
              if(tmpBxid.first->second  > bxid){tmpMap.at(chipId) = bxid;}
-         }
+           }
 
-         }
-
-         std::map<int,int> &tmpAsic  =
-         _stoppingBxidPerAsic.insert({_cycleNo, std::map< int,int >()}).first->second;
-
-         auto tmpChip = tmpAsic.insert({chipId, bxid});
-
-         if(tmpChip.second == false){
-           if(tmpChip.first->second < bxid){tmpAsic.at(chipId) = bxid;}
          }
 
 
@@ -1534,7 +1565,7 @@ namespace eudaq {
   uint32_t ScReader::getTbTimestamp() const
   {
     return _timestampTbCampaign;
-   }
+  }
 
    uint16_t ScReader::grayRecode(const uint16_t partiallyDecoded) {
       //recodes a partially decoded gray number. the 16-bit number is partially decoded for bits 0-11.

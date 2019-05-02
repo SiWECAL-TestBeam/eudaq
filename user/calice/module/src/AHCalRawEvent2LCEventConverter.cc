@@ -73,8 +73,8 @@ namespace eudaq {
 
       }
       else{
-      LCTime now;
-      result.setTimeStamp(now.timeStamp());
+        LCTime now;
+        result.setTimeStamp(now.timeStamp());
       }
 
       // LCTime now;
@@ -211,8 +211,12 @@ namespace eudaq {
                getDataLCIOGenericObject(bl6, col, nblock);
             }
 
+
+
+
          }
       }
+
 
       return true;
 

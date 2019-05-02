@@ -20,7 +20,7 @@ private:
   uint64_t m_ts_bore_bif;
   uint64_t m_ts_bore_cal;
   std::deque<eudaq::EventSPC> m_que_bif;
-  std::deque<eudaq::EventSPC> m_que_cal; 
+  std::deque<eudaq::EventSPC> m_que_cal;
 };
 
 namespace{
@@ -32,7 +32,7 @@ namespace{
 CaliceDataCollector::CaliceDataCollector(const std::string &name,
 					 const std::string &runcontrol):
   DataCollector(name, runcontrol),m_ts_bore_bif(0),m_ts_bore_cal(0){
-  
+
 }
 
 
@@ -51,7 +51,7 @@ void CaliceDataCollector::DoDisconnect(eudaq::ConnectionSPC id){
 
 void CaliceDataCollector::DoStartRun(){
   m_que_bif.clear();
-  m_que_cal.clear();  
+  m_que_cal.clear();
 }
 
 void CaliceDataCollector::DoConfigure(){
