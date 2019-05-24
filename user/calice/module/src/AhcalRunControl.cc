@@ -2,7 +2,6 @@
 #include "eudaq/TransportServer.hh"
 using namespace eudaq;
 
-
 class AhcalRunControl: public eudaq::RunControl {
    public:
       AhcalRunControl(const std::string & listenaddress);
@@ -19,6 +18,10 @@ class AhcalRunControl: public eudaq::RunControl {
       uint32_t m_stop_filesize; //filesize in bytes. Run gets stopped after reaching this size
       uint32_t m_stop_events; // maximum number of events before the run gets stopped
       std::string m_next_conf_path; //filename of the next configuration file
+      std::string m_monitored_collector; //collector name, which is used for checking of the increment
+      uint32_t m_inactivity_timeout; //timeout in seconds. If no change in the monitored data collector after the timeout, run will stop.
+      uint32_t m_monitored_event; //currently last seen event number
+      std::chrono::time_point<std::chrono::steady_clock> m_last_change_time;
       bool m_flag_running;
       std::chrono::steady_clock::time_point m_tp_start_run;
 
@@ -34,10 +37,11 @@ AhcalRunControl::AhcalRunControl(const std::string & listenaddress) :
 }
 
 void AhcalRunControl::StartRun() {
-   
    std::cout << "AHCAL runcontrol StartRun - beginning" << std::endl;
    m_tp_start_run = std::chrono::steady_clock::now();
    RunControl::StartRun();
+   m_monitored_event = 0;
+   m_last_change_time = std::chrono::steady_clock::now();
    m_flag_running = true;
    std::cout << "AHCAL runcontrol StartRun - end" << std::endl;
 }
@@ -56,7 +60,10 @@ void AhcalRunControl::Configure() {
    m_stop_filesize = conf->Get("STOP_RUN_AFTER_N_BYTES", 0);
    m_stop_events = conf->Get("STOP_RUN_AFTER_N_EVENTS", 0);
    m_next_conf_path = conf->Get("NEXT_RUN_CONF_FILE", "");
+   m_inactivity_timeout = conf->Get("STOP_INCATIVITY_SECONDS", 1000000);
+   m_monitored_collector = conf->Get("MONITORED_COLLECTOR_NAME", "");
    if (conf->Get("RUN_NUMBER", 0)) {
+      EUDAQ_INFO_STREAMOUT("Setting new Run number (from conf): " + std::to_string(conf->Get("RUN_NUMBER", 0)), std::cout, std::cerr);
       SetRunN(conf->Get("RUN_NUMBER", 0));
    }
    conf->Print();
@@ -81,60 +88,63 @@ void AhcalRunControl::WaitForStates(const eudaq::Status::State state, const std:
 }
 
 void AhcalRunControl::Exec() {
+   //is being active all the time
    std::cout << "AHCAL runcontrol Exec - before StartRunControl" << std::endl;
    StartRunControl();
    std::cout << "AHCAL runcontrol Exec - after StartRunControl" << std::endl;
-   auto last_change_time = std::chrono::steady_clock::now(); 
-   std::cout<<"RUNNING"<<std::endl;
-   int last_ev_count = 0;
+   //auto last_change_time = std::chrono::steady_clock::now();
+
+   std::cout << "RUNNING" << std::endl;
+   m_monitored_event = 0;
 
    while (IsActiveRunControl()) {
-      //std::cout << "AHCAL runcontrol Exec - while loop" << std::endl;
+      std::cout << "AHCAL runcontrol Exec - while loop" << std::endl;
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       bool restart_run = false; //whether to stop the run. There might be different reasons for it (timeout, number of evts, filesize...)
- 
-	 if (m_flag_running) {
-     
-	//CHECK FOR CHANGE IN FILESIZE
-       auto map_conn_status = GetActiveConnectionStatusMap();
-            for (auto &conn_status : map_conn_status) {
-               auto contype = conn_status.first->GetType();
-               if (contype == "DataCollector") {
-                  for (auto &elem : conn_status.second->GetTags()) {
-                     if (elem.first == "EventN") {
-                       std::cout << conn_status.first->GetName();
-			std::cout<<std::endl;
-			std::cout<<std::endl;
-	       		
-			if (stoi(elem.second)-last_ev_count>0) {
-				if(last_ev_count == 0){
-				std::cout<<"New Run Started..."<<std::endl;
-				}
-			
-					
-              			std::cout<<"EUDAQ received "<<stoi(elem.second)-last_ev_count<<"new events."<<std::endl;
-				last_ev_count = stoi(elem.second);
-				last_change_time = std::chrono::steady_clock::now(); 
-				
-		       	}else{
-				auto tp_now = std::chrono::steady_clock::now(); 
-				int duration_s = std::chrono::duration_cast<std::chrono::seconds>(tp_now - last_change_time).count();
-				int countdown = 60 - duration_s;
-			
-			 	std::cout<<"EUDAQ has found "<<last_ev_count<<"Events.  Waiting for further events, with "<<countdown<<"s remaining."<<std::endl;
-				EUDAQ_INFO_STREAMOUT("EUDAQ has found " + std::to_string(last_ev_count) + "Events.  Waiting for further events, with" + std::to_string(countdown) + "s remaining.", std::cout, std::cerr);
-		
-				if (countdown <= 0){
-					restart_run = true;
-				}
-			}
-			
-			std::cout<<"PRINT DIFF "<<stoi(elem.second)-last_ev_count<<std::endl;	
+
+      if (m_flag_running) {
+         //CHECK FOR CHANGE IN FILESIZE
+         auto map_conn_status = GetActiveConnectionStatusMap();
+         for (auto &conn_status : map_conn_status) {
+            auto contype = conn_status.first->GetType();
+            if (contype == "DataCollector") {
+               if (m_monitored_collector.size() > 1) {               //skip unwanted data collectors
+                  if (m_monitored_collector.compare(conn_status.first->GetName()) != 0) {               //strings do not match
+//                     std::cout << "DEBUG: skipping collector " << conn_status.first->GetName() << std::endl;
+                     continue;
+                  }
+               }
+               for (auto &elem : conn_status.second->GetTags()) {
+                  if (elem.first == "EventN") {
+                     std::cout << conn_status.first->GetName();
+                     std::cout << std::endl;
+                     if (stoi(elem.second) != m_monitored_event) {
+                        //number of events changed
+                        if (m_monitored_event == 0) {
+                           std::cout << "New Run Started..." << std::endl;
+                        }
+                        std::cout << "EUDAQ received " << stoi(elem.second) - m_monitored_event << "new events." << std::endl;
+                        m_monitored_event = stoi(elem.second);
+                        m_last_change_time = std::chrono::steady_clock::now();
+                     } else {
+                        auto tp_now = std::chrono::steady_clock::now();
+                        int duration_s = std::chrono::duration_cast<std::chrono::seconds>(tp_now - m_last_change_time).count();
+                        int countdown = m_inactivity_timeout - duration_s;
+
+                        std::cout << "EUDAQ has found " << m_monitored_event << "Events.  Waiting for further events, with " << countdown << "s remaining."
+                              << std::endl;
+                        if ((m_inactivity_timeout) && (countdown <= 0)) {
+                           EUDAQ_INFO_STREAMOUT(
+                                 "Runcontrol found " + std::to_string(m_monitored_event) + " Events. This value didn't change for " + std::to_string(duration_s)
+                                       + " s.", std::cout, std::cerr);
+                           restart_run = true;
+                        }
                      }
+                     std::cout << "PRINT DIFF " << stoi(elem.second) - m_inactivity_timeout << std::endl;
                   }
                }
             }
-	
+         }
 
          //timeout condition
          if (m_stop_seconds) {
@@ -148,9 +158,6 @@ void AhcalRunControl::Exec() {
             }
 
          }
-	
-
-
 
          //number of event condition
          if (m_stop_events) {
