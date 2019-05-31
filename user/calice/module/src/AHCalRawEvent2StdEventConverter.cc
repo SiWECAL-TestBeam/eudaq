@@ -94,10 +94,10 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       HBUs.push_back(HBU); //add the HBU to the HBU
       HBUHits.push_back(0);
    }
-   unsigned int nblock = 7; // the first 7 blocks contain other information
+   unsigned int nblock = 8; // the first 7 blocks contain other information
    std::cout << ev->GetEventNumber() << "<" << std::flush;
 
-   while ((nblock < ev->NumBlocks())&(nblocks > 6 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
+   while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
       std::vector<int> data;
       const auto & bl = ev->GetBlock(nblock++);
       data.resize(bl.size() / sizeof(int));

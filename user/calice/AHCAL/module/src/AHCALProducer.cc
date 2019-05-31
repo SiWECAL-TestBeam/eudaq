@@ -102,7 +102,7 @@ void AHCALProducer::DoConfigure() {
    uint32_t timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
 
    _reader->setTbTimestamp(timestampTbCampaign);
-  // std::cout<<"timestamp of TB campaign: "<<_timestampTbCampaign<<std::endl;
+   // std::cout<<"timestamp of TB campaign: "<<_timestampTbCampaign<<std::endl;
 
    string eventBuildingMode = param.Get("EventBuildingMode", "ROC");
    if (!eventBuildingMode.compare("ROC")) _eventBuildingMode = AHCALProducer::EventBuildingMode::ROC;
@@ -127,6 +127,7 @@ void AHCALProducer::DoStartRun() {
    _eventNo = 0;
    _BORE_sent = false;
    // raw file open
+   if (!_redirectedInputFileName.empty()) SetStatusTag("ReprocessingFinished", std::to_string(0));
    if (_writeRaw) OpenRawFile(_runNo, _writerawfilename_timestamp);
    if (_StartWaitSeconds) {
       std::cout << "Delayed start by " << _StartWaitSeconds << " seconds. Waiting";
@@ -160,7 +161,8 @@ void AHCALProducer::OpenRawFile(unsigned param, bool _writerawfilename_timestamp
    if (_writerawfilename_timestamp == 1) {
       sprintf(file_timestamp, "__%02dp%02dp%02d__%02dp%02dp%02d.raw", Tm->tm_mday, Tm->tm_mon + 1, Tm->tm_year + 1900, Tm->tm_hour, Tm->tm_min, Tm->tm_sec);
       myString.assign(file_timestamp, 26);
-   } else myString = ".raw";
+   } else
+      myString = ".raw";
 
    std::string _rawFilenameTimeStamp;
    //if chosen like this, add the local time to the filename
@@ -185,6 +187,7 @@ void AHCALProducer::DoStopRun() {
 
    if (_writeRaw) _rawFile.close();
    std::cout << "AHCALProducer::DoStopRun() finished" << std::endl;
+   if (!_redirectedInputFileName.empty()) SetStatusTag("ReprocessingFinished", std::to_string(0));
    //std::cout << "AHCALProducer::OnStopRun sending EORE event with _eventNo" << _eventNo << std::endl;
    //SendEvent(RawDataEvent::EORE("CaliceObject", _runNo, _eventNo));
    //auto ev = eudaq::RawDataEvent::MakeUnique("CaliceObject");
@@ -395,15 +398,17 @@ void AHCALProducer::RunLoop() {
             std::cout << "Cannot send events! sendallevents1 exception: " << e.what() << endl;
          }
          continue;
-      } else if (size == -1) {
-         if (errno == EAGAIN) continue;
-         std::cout << "Error on read: " << errno << " Disconnect and going to the waiting mode." << endl;
-         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-         break;
-      } else if (size == 0) {
-         std::cout << "Socket disconnected. going to the waiting mode." << endl;
-         break;
-      }
+      } else
+         if (size == -1) {
+            if (errno == EAGAIN) continue;
+            std::cout << "Error on read: " << errno << " Disconnect and going to the waiting mode." << endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            break;
+         } else
+            if (size == 0) {
+               std::cout << "Socket disconnected. going to the waiting mode." << endl;
+               break;
+            }
    }   //_running && ! _terminated
    std::cout << "sending the rest of the event" << std::endl;
    _reader->buildEvents(deqEvent, true);
@@ -411,15 +416,20 @@ void AHCALProducer::RunLoop() {
    _stopped = 1;
    bufRead.clear();
    deqEvent.clear();
-   EUDAQ_INFO_STREAMOUT("Completed Run "+std::to_string(GetRunNumber())+". ROC=" + std::to_string(dynamic_cast<ScReader*>(_reader)->getCycleNo()) +
-         ", Triggers=" + std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()) +
-         ", Events=" + std::to_string(_eventNo), std::cout, std::cerr);
+   EUDAQ_INFO_STREAMOUT(
+         "Completed Run " + std::to_string(GetRunNumber()) + ". ROC=" + std::to_string(dynamic_cast<ScReader*>(_reader)->getCycleNo()) + ", Triggers="
+               + std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()) + ", Events=" + std::to_string(_eventNo), std::cout,
+         std::cerr);
 #ifdef _WIN32
    closesocket(_fd);
 #else
    close(_fd);
 #endif
    _fd = -1;
+   if (!_redirectedInputFileName.empty()) { //signalling during reprocessing
+      std::this_thread::sleep_for(std::chrono::milliseconds(3000)); //extra time for the data collectors to process the events
+      SetStatusTag("ReprocessingFinished", std::to_string(1));
+   }
 }
 
 AHCALProducer::EventBuildingMode AHCALProducer::getEventMode() const {
@@ -473,28 +483,23 @@ int AHCALProducer::getKeepBuffered() const {
    return _KeepBuffered;
 }
 
-int AHCALProducer::getMaxRocJump() const
-{
+int AHCALProducer::getMaxRocJump() const {
    return _maxRocJump;
 }
 
-int AHCALProducer::getAppendDifidToChipidBitPosition() const
-{
+int AHCALProducer::getAppendDifidToChipidBitPosition() const {
    return _AppendDifidToChipidBitPosition;
 }
 
-int AHCALProducer::getChipidAddAfterMasking() const
-{
+int AHCALProducer::getChipidAddAfterMasking() const {
    return _ChipidAddAfterMasking;
 }
 
-int AHCALProducer::getChipidAddBeforeMasking() const
-{
+int AHCALProducer::getChipidAddBeforeMasking() const {
    return _ChipidAddBeforeMasking;
 }
 
-int AHCALProducer::getChipidKeepBits() const
-{
+int AHCALProducer::getChipidKeepBits() const {
    return _ChipidKeepBits;
 }
 

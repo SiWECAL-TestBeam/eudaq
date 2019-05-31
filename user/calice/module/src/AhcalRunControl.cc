@@ -37,20 +37,20 @@ AhcalRunControl::AhcalRunControl(const std::string & listenaddress) :
 }
 
 void AhcalRunControl::StartRun() {
-   std::cout << "AHCAL runcontrol StartRun - beginning" << std::endl;
+   std::cout << "AHCAL runcontrol StartRun " << GetRunN() << " - beginning" << std::endl;
    m_tp_start_run = std::chrono::steady_clock::now();
    RunControl::StartRun();
    m_monitored_event = 0;
    m_last_change_time = std::chrono::steady_clock::now();
    m_flag_running = true;
-   std::cout << "AHCAL runcontrol StartRun - end" << std::endl;
+   std::cout << "AHCAL runcontrol StartRun " << GetRunN() << " - end" << std::endl;
 }
 
 void AhcalRunControl::StopRun() {
-   std::cout << "AHCAL runcontrol StopRun - beginning" << std::endl;
+   std::cout << "AHCAL runcontrol StopRun " << GetRunN() << " - beginning" << std::endl;
    RunControl::StopRun();
    m_flag_running = false;
-   std::cout << "AHCAL runcontrol StopRun - end" << std::endl;
+   std::cout << "AHCAL runcontrol StopRun " << GetRunN() << " - end" << std::endl;
 }
 
 void AhcalRunControl::Configure() {
@@ -107,6 +107,7 @@ void AhcalRunControl::Exec() {
          auto map_conn_status = GetActiveConnectionStatusMap();
          for (auto &conn_status : map_conn_status) {
             auto contype = conn_status.first->GetType();
+
             if (contype == "DataCollector") {
                if (m_monitored_collector.size() > 1) {               //skip unwanted data collectors
                   if (m_monitored_collector.compare(conn_status.first->GetName()) != 0) {               //strings do not match
@@ -116,8 +117,7 @@ void AhcalRunControl::Exec() {
                }
                for (auto &elem : conn_status.second->GetTags()) {
                   if (elem.first == "EventN") {
-                     std::cout << conn_status.first->GetName();
-                     std::cout << std::endl;
+                     std::cout << conn_status.first->GetName() << std::endl;
                      if (stoi(elem.second) != m_monitored_event) {
                         //number of events changed
                         if (m_monitored_event == 0) {
@@ -141,6 +141,18 @@ void AhcalRunControl::Exec() {
                         }
                      }
                      std::cout << "PRINT DIFF " << stoi(elem.second) - m_inactivity_timeout << std::endl;
+                  }
+                  if (!conn_status.first->IsEnabled()) {
+                     std::cout << "DEBUG collector not enabled" << std::endl;
+                  };
+               }
+            }
+            if (contype == "Producer") {
+               for (auto &elem : conn_status.second->GetTags()) {
+                  if (elem.first == "ReprocessingFinished") {
+                     if (stoi(elem.second) == 1){
+                        restart_run = true;
+                     }
                   }
                }
             }

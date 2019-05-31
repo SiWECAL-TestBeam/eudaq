@@ -12,7 +12,7 @@ namespace eudaq {
       public:
          bool Converting(EventSPC d1, LCEventSP d2, ConfigurationSPC conf) const override;
          static const uint32_t m_id_factory = cstr2hash("CaliceObject");
-         private:
+      private:
          LCCollectionVec* createCollectionVec(lcio::LCEvent &result, string colName, string dataDesc, time_t timestamp, int DAQquality) const;
          void getScCALTemperatureSubEvent(const std::vector<uint8_t> &bl, LCCollectionVec *col) const;
          void getDataLCIOGenericObject(const std::vector<uint8_t> &bl, LCCollectionVec *col, int nblock) const;
@@ -21,8 +21,7 @@ namespace eudaq {
    };
 
    namespace {
-      auto dummy0 = Factory<LCEventConverter>::
-            Register<AHCalRawEvent2LCEventConverter>(AHCalRawEvent2LCEventConverter::m_id_factory);
+      auto dummy0 = Factory<LCEventConverter>::Register<AHCalRawEvent2LCEventConverter>(AHCalRawEvent2LCEventConverter::m_id_factory);
    }
 
    static const char* EVENT_TYPE = "CaliceObject";
@@ -54,34 +53,40 @@ namespace eudaq {
       auto& source = *(d1.get());
       auto& result = *(d2.get());
       //
-      uint64_t tbTimestamp= source.GetTag("tbTimestamp",0);
-
+      uint64_t tbTimestamp = source.GetTag("tbTimestamp", 0);
+      time_t shiftedUnixTS = 0L; //reconstructed timestamp of older run
+      //DAQ_ERROR_STATUS
+      int eudaqErrorStatus = source.GetTag("DAQ_ERROR_STATUS", 0);
+      result.parameters().setValue("DaqErrorStatus", eudaqErrorStatus);
       auto bl0 = source.GetBlock(0);
       string colName((char *) &bl0.front(), bl0.size());
-      if(tbTimestamp > 0){
-        if (colName == "EUDAQDataBIF"){
+      if (tbTimestamp > 0) {
+         if (colName == "EUDAQDataBIF") {
+            double ts = source.GetTimestampBegin();
+            uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + (ts * 0.78125);
+            shiftedUnixTS = tbTimestamp + (ts / 1280000000);
+            result.setTimeStamp(eventTsNanoSeconds);
+         }
+         if (colName == "EUDAQDataScCAL") {
+            uint64_t ts = source.GetTimestampBegin();
+            uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + (ts * 25);
+            shiftedUnixTS = tbTimestamp + (ts / 40000000);
+            result.setTimeStamp(eventTsNanoSeconds);
+//            std::cout << "DEBUG tbTimestamp=" << tbTimestamp << std::endl;
+//            std::cout << "DEBUG ts=" << ts << std::endl;
+//            std::cout << "DEBUG shiftedUnixTS=" << shiftedUnixTS << std::endl;
+         }
 
-          uint64_t ts = source.GetTimestampBegin();
-          uint64_t eventTsNanoSeconds = tbTimestamp*1000000000+(ts*25);
-          result.setTimeStamp(eventTsNanoSeconds);
-        }
-        if (colName == "EUDAQDataScCAL"){
-          double ts = source.GetTimestampBegin();
-          uint64_t eventTsNanoSeconds = tbTimestamp*1000000000+(ts*0.78125);
-          result.setTimeStamp(eventTsNanoSeconds);
-        }
-
-      }
-      else{
-        LCTime now;
-        result.setTimeStamp(now.timeStamp());
+      } else {
+         LCTime now;
+         result.setTimeStamp(now.timeStamp());
       }
 
       // LCTime now;
       // std::cout<<"timestampNow: "<<now.timeStamp()<<std::endl;
 
-      if (source.IsBORE()) std::cout<<"DEBUG BORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-      if (source.IsEORE()) std::cout<<"DEBUG EORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+      if (source.IsBORE()) std::cout << "DEBUG BORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+      if (source.IsEORE()) std::cout << "DEBUG EORE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
       eudaq::RawDataEvent const * rawev = 0;
       try {
          eudaq::RawDataEvent const & rawdataevent = dynamic_cast<eudaq::RawDataEvent const &>(source);
@@ -98,9 +103,9 @@ namespace eudaq {
 
       // no contents -ignore
       if (rawev->NumBlocks() < 2) {
-        //std::cout<<"!!!!!"<<std::endl;
+         //std::cout<<"!!!!!"<<std::endl;
 
-        return true;
+         return true;
       }
 
       unsigned int nblock = 0;
@@ -108,7 +113,7 @@ namespace eudaq {
       if (rawev->NumBlocks() > 2) {
 
          // check if the data is okay (checked at the producer level)
-         int DAQquality = rawev->GetTag("DAQquality", 1);
+         int DAQquality = rawev->GetTag("DAQquality", eudaqErrorStatus ? 0 : 1);
 
          // first two blocks should be string, 3rd is time
          auto bl0 = rawev->GetBlock(nblock++);
@@ -120,6 +125,7 @@ namespace eudaq {
          // EUDAQ TIMESTAMP, saved in ScReader.cc
          auto bl2 = rawev->GetBlock(nblock++);
          time_t timestamp = *(unsigned int *) (&bl2[0]);
+         if (tbTimestamp > 0) timestamp = shiftedUnixTS; //override of time in reprocessing
          //std::cout<<timestamp<<std::endl;
          //std::cout<<"colName: "<<colName<<", DataDesc: "<<dataDesc<<std::endl;
 
@@ -188,10 +194,11 @@ namespace eudaq {
 
             nblock++;
             auto bl7 = rawev->GetBlock(7);
-            if(bl7.size()>0){
-              LCCollectionVec *col = 0;
-              col = createCollectionVec(result, "ASICStopData", "[i:asic(memCell 15),i:lowest bxid(memCell15)],[[i:asic, i:stop bxid in asic],[],...]", timestamp, DAQquality);
-              getDataLCIOGenericObject(bl7, col,nblock);
+            if (bl7.size() > 0) {
+               LCCollectionVec *col = 0;
+               col = createCollectionVec(result, "ASICStopData", "[i:asic(memCell 15),i:lowest bxid(memCell15)],[[i:asic, i:stop bxid in asic],[],...]",
+                     timestamp, DAQquality);
+               getDataLCIOGenericObject(bl7, col, nblock);
             }
             // //-------------------
             // // READ/WRITE Timestamps
@@ -207,16 +214,13 @@ namespace eudaq {
             if (bl6.size() > 0) {
                //cout << "Looking for Timestamps collection..." << endl;
                LCCollectionVec *col = 0;
-               col = createCollectionVec(result, "EUDAQDataLDATS", "i:StartTS_L;i:StartTS_H;i:StopTS_L;i:StopTS_H;i:TrigTS_L;i:TrigTS_H", timestamp, DAQquality);
+               col = createCollectionVec(result, "EUDAQDataLDATS", "i:StartTS_L;i:StartTS_H;i:StopTS_L;i:StopTS_H;i:TrigTS_L;i:TrigTS_H", timestamp,
+                     DAQquality);
                getDataLCIOGenericObject(bl6, col, nblock);
             }
 
-
-
-
          }
       }
-
 
       return true;
 
@@ -232,7 +236,7 @@ namespace eudaq {
          // create new collection
          col = new IMPL::LCCollectionVec(LCIO::LCGENERICOBJECT);
          result.addCollection(col, colName);
-      col->parameters().setValue("DataDescription", dataDesc);
+         col->parameters().setValue("DataDescription", dataDesc);
       }
       //add timestamp (set by the Producer, is EUDAQ, not real timestamp!!)
       struct tm *tms = localtime(&timestamp);

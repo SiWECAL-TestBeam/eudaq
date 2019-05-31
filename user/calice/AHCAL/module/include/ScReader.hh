@@ -6,7 +6,26 @@
 
 #include <deque>
 
+#define TERMCOLOR_RED_BOLD "\033[31;1m"
+#define TERMCOLOR_RED "\033[31m"
+#define TERMCOLOR_GREEN_BOLD "\033[32;1m"
+#define TERMCOLOR_GREEN "\033[32m"
+#define TERMCOLOR_YELLOW_BOLD "\033[33;1m"
+#define TERMCOLOR_YELLOW "\033[33m"
+#define TERMCOLOR_BLUE_BOLD "\033[34;1m"
+#define TERMCOLOR_BLUE "\033[34m"
 #define TERMCOLOR_MAGENTA_BOLD "\033[35;1m"
+#define TERMCOLOR_MAGENTA "\033[35m"
+#define TERMCOLOR_CYAN_BOLD "\033[36;1m"
+#define TERMCOLOR_CYAN "\033[36m"
+#define TERMCOLOR_RESET "\033[0m"
+
+#define DAQ_ERRORS_INCOMPLETE        0x0001
+#define DAQ_ERRORS_OUTSIDE_ACQ       0x0002
+#define DAQ_ERRORS_MULTIPLE_TRIGGERS 0x0004
+#define DAQ_ERRORS_MISSED_DUMMY      0x0008
+#define DAQ_ERRORS_MISSING_START     0x0010
+#define DAQ_ERRORS_MISSING_STOP      0x0020
 
 namespace eudaq {
 
@@ -18,8 +37,8 @@ namespace eudaq {
          virtual void OnConfigLED(std::string _fname) override; //chose configuration file for LED runs
          virtual void buildEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) override;
 
-         virtual std::deque<eudaq::RawEvent *> NewEvent_createRawDataEvent(std::deque<eudaq::RawEvent *> deqEvent, bool tempcome, int LdaRawcycle,
-               bool newForced);
+//         virtual std::deque<eudaq::RawEvent *> NewEvent_createRawDataEvent(std::deque<eudaq::RawEvent *> deqEvent, bool tempcome, int LdaRawcycle,
+//         bool newForced);
          virtual void readTemperature(std::deque<char>& buf);
 
          virtual void setTbTimestamp(uint32_t ts) override;
@@ -40,8 +59,6 @@ namespace eudaq {
 //                     length(0) {
 //         }
          virtual ~ScReader();
-
-
 
          struct LDATimeData {
                uint64_t TS_Start; //start of acquisition
@@ -66,6 +83,7 @@ namespace eudaq {
                int triggers_inside_roc;
                int triggers_outside_roc;
                int triggers_lost; //completely missed triggers due to data loss
+               int triggers_empty;
                int builtBXIDs; //how many BXIDs was made during event building
                std::vector<uint64_t> length_acquisitions;
                std::vector<uint64_t> length_processing;
@@ -115,11 +133,17 @@ namespace eudaq {
 
          void readAHCALData(std::deque<char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
          void readLDATimestamp(std::deque<char> &buf, std::map<int, LDATimeData> &LDATimestamps);
+         eudaq::EventUP insertMissedTrigger(const int roc, const uint64_t startTS, const int lastBuiltEventNr, const int ErrorStatus);
+
+         bool IsBXIDComplete(const int roc, const int AhcalBxid, std::map<int, std::vector<std::vector<int> > >::const_iterator sameBxidPacketIterator,
+               bool reportIncomplete);
+         eudaq::EventUP insertEmptyEvent(const uint64_t stopTS, const uint64_t startTS, const uint64_t triggerTs, const int lastBuiltEventNr,const int triggerBxid, const int roc, int& ErrorStatus);
 
          UnfinishedPacketStates _unfinishedPacketState;
 
          int _runNo;
-         int _cycleNo; //last successfully read readoutcycle
+         int _cycleNo; //last successfully read readoutcycle: ASIC Data
+         int _cycleNoTS;// last timestamp cycle number
          unsigned int _trigID; //last successfully read trigger ID from LDA timestamp. Next trigger should be _trigID+1
          unsigned int length; //length of the packed derived from LDA Header
 
@@ -130,7 +154,7 @@ namespace eudaq {
          std::vector<std::pair<std::pair<int, int>, int> > _vecTemp;            // (lda, port), data;
          std::vector<int> slowcontrol;
          std::vector<int> ledInfo;
-         std::vector<int> HVAdjInfo;// Bias Voltage adjustments. Data structure: entry is an 8x integer in following format: LDA, Port, Module, 0 HV1, HV2, HV3, 0
+         std::vector<int> HVAdjInfo; // Bias Voltage adjustments. Data structure: entry is an 8x integer in following format: LDA, Port, Module, 0 HV1, HV2, HV3, 0
          std::vector<uint32_t> cycleData;
 
          int _lastBuiltEventNr;            //last event number for keeping track of missed events in the stream (either ROC, trigger number or arbitrary number)
@@ -142,13 +166,10 @@ namespace eudaq {
 
          std::map<int, int> _DaqErrors;              // <ReadoutCycleNumber, ErrorMask> if errormas is 0, everything is OK
 
-         std::map<int,int> minLastBxid_Detector;//stores the minimum! lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
-                                                //throughout the Detector
+         std::map<int, int> minLastBxid_Detector;              //stores the minimum! lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
+                                                               //throughout the Detector
 
-         std::map<int, std::map<int,int> >  minLastBxid_Asic;
-
-
-
+         std::map<int, std::map<int, int> > minLastBxid_Asic;
 
          uint32_t _timestampTbCampaign;
 
