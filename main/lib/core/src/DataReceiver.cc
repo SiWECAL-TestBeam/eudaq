@@ -99,9 +99,9 @@ namespace eudaq {
 	  (Factory<Event>::MakeUnique<Deserializer&>(id, ser), con);
 	std::unique_lock<std::mutex> lk(m_mx_qu_ev);
 	m_qu_ev.push(ev_con);
-	if(m_qu_ev.size() > 500000){
+	if(m_qu_ev.size() > 50000000){
 	  m_qu_ev.pop();
-	  EUDAQ_WARN("DataReceiver: Buffer of receving event is full.");
+	  EUDAQ_WARN("DataReceiver: Buffer of receving event is full. Throwing away!");
 	}
 	m_cv_not_empty.notify_all();
       }
