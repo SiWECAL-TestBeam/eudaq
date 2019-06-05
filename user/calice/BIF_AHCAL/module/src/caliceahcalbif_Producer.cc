@@ -946,7 +946,7 @@ void caliceahcalbifProducer::buildEudaqEventsBxid(std::deque<eudaq::EventUP>& de
    if (lastBxid != INT_MIN) {
       std::copy(stop_packet.begin(), stop_packet.end(), std::back_inserter(data));
       ev->AddBlock(6, data);
-      std::cout<<"here the timestamp"<<std::endl;
+      //std::cout<<"here the timestamp"<<std::endl;
       deqEvent.push_back(std::move(ev));
    }
    data.clear();

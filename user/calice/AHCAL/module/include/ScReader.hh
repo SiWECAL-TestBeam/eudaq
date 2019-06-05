@@ -88,6 +88,7 @@ namespace eudaq {
                std::vector<uint64_t> length_acquisitions;
                std::vector<uint64_t> length_processing;
                std::map<int, int> triggers_in_cycle_histogram;
+               std::map<int,int> trigger_multiplicity_in_bxid;// <triggers,count> how many triggers have been present in the bxid
          };
 
          const ScReader::RunTimeStatistics& getRunTimesStatistics() const;

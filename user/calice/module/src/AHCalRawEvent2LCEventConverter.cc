@@ -15,6 +15,7 @@ namespace eudaq {
       private:
          LCCollectionVec* createCollectionVec(lcio::LCEvent &result, string colName, string dataDesc, time_t timestamp, int DAQquality) const;
          void getScCALTemperatureSubEvent(const std::vector<uint8_t> &bl, LCCollectionVec *col) const;
+         void getScCALHVSubEvent(const std::vector<uint8_t> &bl, LCCollectionVec *col) const;
          void getDataLCIOGenericObject(const std::vector<uint8_t> &bl, LCCollectionVec *col, int nblock) const;
          void getDataLCIOGenericObject(eudaq::RawDataEvent const *rawev, LCCollectionVec *col, int nblock, int nblock_max = 0) const;
 
@@ -60,12 +61,14 @@ namespace eudaq {
       result.parameters().setValue("DaqErrorStatus", eudaqErrorStatus);
       auto bl0 = source.GetBlock(0);
       string colName((char *) &bl0.front(), bl0.size());
+      int RawLDATrigId = source.GetTag("RawLDATrigId", -1);
+      if (RawLDATrigId != -1) result.parameters().setValue("RawLDATrigId", RawLDATrigId);
       if (tbTimestamp > 0) {
          if (colName == "EUDAQDataBIF") {
             double ts = source.GetTimestampBegin();
             uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + (ts * 0.78125);
             shiftedUnixTS = tbTimestamp + (ts / 1280000000);
-            result.setTimeStamp(eventTsNanoSeconds);
+            //result.setTimeStamp(eventTsNanoSeconds);
          }
          if (colName == "EUDAQDataScCAL") {
             uint64_t ts = source.GetTimestampBegin();
@@ -104,7 +107,6 @@ namespace eudaq {
       // no contents -ignore
       if (rawev->NumBlocks() < 2) {
          //std::cout<<"!!!!!"<<std::endl;
-
          return true;
       }
 
@@ -192,25 +194,10 @@ namespace eudaq {
                getScCALTemperatureSubEvent(bl5, col);
             }
 
-            nblock++;
-            auto bl7 = rawev->GetBlock(7);
-            if (bl7.size() > 0) {
-               LCCollectionVec *col = 0;
-               col = createCollectionVec(result, "ASICStopData", "[i:asic(memCell 15),i:lowest bxid(memCell15)],[[i:asic, i:stop bxid in asic],[],...]",
-                     timestamp, DAQquality);
-               getDataLCIOGenericObject(bl7, col, nblock);
-            }
             // //-------------------
             // // READ/WRITE Timestamps
             // //the  block=6, if non empty,
-            nblock++;
-            // READ BLOCKS WITH DATA
-            LCCollectionVec *col = 0;
-            col = createCollectionVec(result, colName, dataDesc, timestamp, DAQquality);
-            getDataLCIOGenericObject(rawev, col, nblock);
-
-            auto bl6 = rawev->GetBlock(6);
-            // if (bl6.size() == 0) cout << "Nothing in Timestamps collection..." << endl;
+            auto bl6 = rawev->GetBlock(nblock++);
             if (bl6.size() > 0) {
                //cout << "Looking for Timestamps collection..." << endl;
                LCCollectionVec *col = 0;
@@ -219,6 +206,27 @@ namespace eudaq {
                getDataLCIOGenericObject(bl6, col, nblock);
             }
 
+            auto bl7 = rawev->GetBlock(nblock++);
+            if (bl7.size() > 0) {
+               LCCollectionVec *col = 0;
+               col = createCollectionVec(result, "ASICStopData", "[i:asic(memCell 15),i:lowest bxid(memCell15)],[[i:asic, i:stop bxid in asic],[],...]",
+                     timestamp, DAQquality);
+               getDataLCIOGenericObject(bl7, col, nblock);
+            }
+
+            auto bl8 = rawev->GetBlock(nblock++);
+            if (bl8.size() > 0) {
+               LCCollectionVec *col = 0;
+               col = createCollectionVec(result, "HVAdjInfo", "i:LDA,i:port,i:Module,i:0,i:HV1,i:HV2,i:HV3,i:0", timestamp, DAQquality);
+               getScCALTemperatureSubEvent(bl8, col);
+               getScCALHVSubEvent(bl8, col);
+            }
+            auto bl9 = rawev->GetBlock(nblock++);            //not yet used
+
+            // READ BLOCKS WITH DATA
+            LCCollectionVec *col = 0;
+            col = createCollectionVec(result, colName, dataDesc, timestamp, DAQquality);
+            getDataLCIOGenericObject(rawev, col, nblock);
          }
       }
 
@@ -257,18 +265,18 @@ namespace eudaq {
       memcpy(&vec[0], &bl[0], bl.size());
 
       vector<int> output;
-      int lda = -1;
-      int port = 0;
+      int lda = vec[0];            //init to first temperature entry
+      int port = vec[1];
       for (unsigned int i = 0; i < vec.size() - 2; i += 3) {
-         if ((i / 3) % 2 == 0) continue; // just ignore the first data;
-         if (output.size() != 0 && port != vec[i + 1]) {
-            cout << "Different port number comes before getting 8 data!." << endl;
-            break;
+         if ((i / 3) % 2 == 0) continue; // just ignore the first measurement data;
+         if ((output.size() != 0) && (port != vec[i + 1]) && (lda != vec[i])) {
+            cout << "Different port number comes before getting 8 temperature measurements!." << endl;
+            output.clear();
          }
+         lda = vec[i];
          port = vec[i + 1]; // port number
          int data = vec[i + 2]; // data
          if (output.size() == 0) {
-            if (port == 0) lda++;
             output.push_back(lda);
             output.push_back(port);
          }
@@ -281,10 +289,40 @@ namespace eudaq {
                col->addElement(obj);
             } catch (ReadOnlyException &e) {
                cout << "CaliceGenericConverterPlugin: the collection to add is read only! skipped..." << endl;
+               std::cout << e.what() << std::endl;
                delete obj;
             }
             output.clear();
          }
+      }
+   }
+
+   void AHCalRawEvent2LCEventConverter::getScCALHVSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
+      cout << "Looking for Bias adjustment Collection... " << endl;
+
+      vector<int> vec;
+      vec.resize(bl.size() / sizeof(int));
+      memcpy(&vec[0], &bl[0], bl.size());
+
+      if (vec.size() & 0x07) {
+         std::cout << "ERROR: HV information corrupted. Not processing" << std::endl;
+         return;
+      }
+
+      vector<int> output;
+      for (unsigned int line = 0; line < vec.size() / 8; line++) {
+         for (int i = 0; i < 8; i++) {
+            output.push_back(vec[(line << 3) + i]);
+         }
+         CaliceLCGenericObject *obj = new CaliceLCGenericObject;
+         obj->setIntDataInt(output);
+         try {
+            col->addElement(obj);
+         } catch (ReadOnlyException &e) {
+            cout << "CaliceGenericConverterPlugin: the collection to add is read only! skipped..." << endl;
+            delete obj;
+         }
+         output.clear();
       }
    }
 

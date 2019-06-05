@@ -97,7 +97,8 @@ void AHCALProducer::DoConfigure() {
    _ChipidAddAfterMasking = param.Get("ChipidAddAfterMasking", 0);
    _AppendDifidToChipidBitPosition = param.Get("AppendDifidToChipidBitPosition", -1);
    _minimumBxid = param.Get("MinimumBxid", 0);
-   _minEventHits = param.Get("MinimumEventHits", 1);
+   _maximumBxid= param.Get("MaximumBxid", 4095);
+   _minEventHits = param.Get("MinimumEventHits", 1); //count of contributing ASICs
 
    uint32_t timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
 
@@ -115,11 +116,8 @@ void AHCALProducer::DoConfigure() {
    if (!eventNumberingMode.compare("TRIGGERID")) _eventNumberingPreference = AHCALProducer::EventNumbering::TRIGGERID;
    if (!eventNumberingMode.compare("TIMESTAMP")) _eventNumberingPreference = AHCALProducer::EventNumbering::TIMESTAMP;
    std::cout << "Preferring event numbering type: \"" << eventNumberingMode << "\"" << std::endl;
-
    //_configured = true;
-
    std::cout << " END AHCAL congfiguration " << std::endl;
-
 }
 
 void AHCALProducer::DoStartRun() {
@@ -256,6 +254,9 @@ bool AHCALProducer::OpenConnection() {
       return 1;
    } else {
       std::cout << "Redirecting intput from file: " << _redirectedInputFileName << std::endl;
+      std::cout << "Waiting " << _waitmsFile << " ms ...";
+      eudaq::mSleep(_waitmsFile);
+      std::cout << "Finished";
       _fd = open(_redirectedInputFileName.c_str(), O_RDONLY);
       if (_fd < 0) {
          cout << "open redirected file failed from this path:" << _redirectedInputFileName << endl;
@@ -334,7 +335,7 @@ void AHCALProducer::sendallevents(std::deque<eudaq::EventUP> & deqEvent, int min
 //               EUDAQ_WARN("Run " + to_string(_runNo) + " Event " + to_string(deqEvent.front()->GetEventN()) + " not in sequence. Expected " + to_string(_eventNo + 1));
 //            }
          //std::cout << "#DEBUG: sm_block=" << std::to_string(deqEvent.front()->GetBlockNumList().size()) << std::endl;
-         if ((deqEvent.front()->GetBlockNumList().size() - 7) >= _minEventHits) {
+         if ((deqEvent.front()->GetBlockNumList().size() - 10) >= _minEventHits) {
             _eventNo++;      // = deqEvent.front()->GetEventN();
             SendEvent(std::move(deqEvent.front()));
          }
@@ -505,4 +506,12 @@ int AHCALProducer::getChipidKeepBits() const {
 
 int AHCALProducer::getMinimumBxid() const {
    return _minimumBxid;
+}
+
+int AHCALProducer::getMaximumBxid() const {
+   return _maximumBxid;
+}
+
+int AHCALProducer::getMinEventHits() const {
+   return _minEventHits;
 }
