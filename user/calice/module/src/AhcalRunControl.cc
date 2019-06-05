@@ -43,6 +43,7 @@ void AhcalRunControl::StartRun() {
    m_monitored_event = 0;
    m_last_change_time = std::chrono::steady_clock::now();
    m_flag_running = true;
+   m_inactivity_timeout = GetConfiguration()->Get("STOP_INCATIVITY_SECONDS", 1000000);
    std::cout << "AHCAL runcontrol StartRun " << GetRunN() << " - end" << std::endl;
 }
 
@@ -150,8 +151,9 @@ void AhcalRunControl::Exec() {
             if (contype == "Producer") {
                for (auto &elem : conn_status.second->GetTags()) {
                   if (elem.first == "ReprocessingFinished") {
-                     if (stoi(elem.second) == 1){
-                        restart_run = true;
+                     if (stoi(elem.second) == 1) {
+//                        restart_run = true;
+                        m_inactivity_timeout = 5;
                      }
                   }
                }
