@@ -522,7 +522,7 @@ namespace eudaq {
    eudaq::EventUP ScReader::insertEmptyEvent(const uint64_t stopTS, const uint64_t startTS, const uint64_t triggerTs, const int lastBuiltEventNr,
          const int triggerBxid, const int roc, int& ErrorStatus) {
       _RunTimesStatistics.triggers_empty++;
-      _RunTimesStatistics.trigger_multiplicity_in_bxid[0]++;
+      _RunTimesStatistics.trigger_multiplicity_in_bxid[1]++;
       if (!stopTS) ErrorStatus |= DAQ_ERRORS_MISSING_STOP;
       if (!startTS) ErrorStatus |= DAQ_ERRORS_MISSING_START;
       if ((triggerTs > stopTS) || (triggerBxid < 0)) ErrorStatus |= DAQ_ERRORS_OUTSIDE_ACQ;
@@ -1565,7 +1565,8 @@ namespace eudaq {
       out << "Lost triggers (data loss): " << triggers_lost << " ( " << (100.0 * triggers_lost / (triggers_inside_roc + triggers_outside_roc + triggers_lost))
             << " % of all triggers)" << std::endl;
       out << "Built BXIDs: " << builtBXIDs << std::endl;
-      out << "   empty BXIDs: " << triggers_empty << std::endl;
+      out << "   empty BXIDs: " << triggers_empty << " (" << (100.0 * triggers_empty / (triggers_inside_roc + triggers_outside_roc + triggers_lost)) << "%)"
+            << std::endl;
       out << "Total triggers (including missed): " << triggers_lost + triggers_inside_roc + triggers_outside_roc << std::endl;
       out << "Trigger distribution per Acquisition cycle:" << std::endl;
       for (std::map<int, int>::const_iterator it = triggers_in_cycle_histogram.begin(); it != triggers_in_cycle_histogram.end(); ++it) {
@@ -1573,7 +1574,8 @@ namespace eudaq {
       }
       out << "Trigger multiplicity per BXID:" << std::endl;
       for (auto it = trigger_multiplicity_in_bxid.cbegin(); it != trigger_multiplicity_in_bxid.end(); ++it) {
-         out << "        " << to_string(it->first) << " triggers in " << it->second << " BXIDs" << std::endl;
+         out << "        " << to_string(it->first) << " triggers in " << it->second << " BXIDs" << " ("
+               << (100.0 * it->second / (triggers_inside_roc + triggers_outside_roc + triggers_lost)) << "%)" << std::endl;
       }
 
       out << "============================================================";
