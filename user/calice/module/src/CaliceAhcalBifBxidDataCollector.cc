@@ -40,7 +40,6 @@ private:
    void AddEvent_TimeStamp(uint32_t id, eudaq::EventSPC ev);
    void BuildEvent_bxid();
 
-
       std::mutex m_mutex;
       //to be edited according to the name of the processes. TODO implement as parameter to the configuration
       std::string mc_name_ahcal = "AHCAL1";
@@ -87,6 +86,7 @@ private:
       bool m_offset_ahcal2bif_done;
       int64_t m_ts_offset_ahcal2bif;
       uint32_t m_ev_n;
+      bool m_disable_print;
 };
 
 namespace {
@@ -117,15 +117,16 @@ void CaliceAhcalBifBxidDataCollector::DoStartRun() {
 }
 
 void CaliceAhcalBifBxidDataCollector::DoConfigure() {
-  auto conf = GetConfiguration();
-  if (conf) {
-     conf->Print();
-     // m_pri_ts = conf->Get("PRIOR_TIMESTAMP", m_pri_ts?1:0);
-  }
-  int MandatoryBif = conf->Get("MandatoryBif", 1);
-  m_evt_mandatory_bif = (MandatoryBif == 1) ? true : false;
-  std::cout << "#MandatoryBif=" << MandatoryBif << std::endl;
-  lastprinttime = std::chrono::system_clock::now();
+   auto conf = GetConfiguration();
+   if (conf) {
+      conf->Print();
+      // m_pri_ts = conf->Get("PRIOR_TIMESTAMP", m_pri_ts?1:0);
+   }
+   int MandatoryBif = conf->Get("MandatoryBif", 1);
+   m_evt_mandatory_bif = (MandatoryBif == 1) ? true : false;
+   m_disable_print = conf->Get("DISABLE_PRINT", 1) == 1 ? true : false;
+   std::cout << "#MandatoryBif=" << MandatoryBif << std::endl;
+   lastprinttime = std::chrono::system_clock::now();
 }
 
 void CaliceAhcalBifBxidDataCollector::DoConnect(eudaq::ConnectionSPC idx) {
@@ -416,6 +417,7 @@ inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
       if (m_evt_mandatory_hodoscope2 && (!present_hodoscope2) && (m_active_hodoscope2)) continue; //throw awway incomplete event
       m_thrown_incomplete -= 1; //and decrease back.
       ev_sync->SetEventN(m_ev_n++);
-//      ev_sync->Print(std::cout);
-      WriteEvent(std::move(ev_sync));   }
+      if (!m_disable_print) ev_sync->Print(std::cout);
+      WriteEvent(std::move(ev_sync));
+   }
 }
