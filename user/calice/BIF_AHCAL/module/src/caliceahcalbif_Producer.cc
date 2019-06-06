@@ -56,16 +56,22 @@ class caliceahcalbifProducer: public eudaq::Producer {
       caliceahcalbifProducer::EventNumbering _eventNumberingPreference;
 
       unsigned m_run;
-      unsigned readout_delay;bool done;bool _TLUStarted;bool _TLUJustStopped;
-      std::unique_ptr<caliceahcalbifController> m_tlu;bool _BORESent;
+      unsigned readout_delay;
+      bool done;
+      bool _TLUStarted;
+      bool _TLUJustStopped;
+      std::unique_ptr<caliceahcalbifController> m_tlu;
+      bool _BORESent;
 
       // debug output
-      double _WaitAfterStopSeconds;bool _dumpRaw; //print events to screen
+      double _WaitAfterStopSeconds;
+      bool _dumpRaw; //print events to screen
       int _dumpCycleInfoLevel; // print Readout cycle summary
       int _dumpTriggerInfoLevel; // print detailed info about each trigger
       bool _dumpSummary; // print summary after the end of run
       bool _writeRaw; //write to separate file
-      std::string _rawFilename;bool _writerawfilename_timestamp; //whether to append timestamp to the raw file
+      std::string _rawFilename;
+      bool _writerawfilename_timestamp; //whether to append timestamp to the raw file
       bool _word1WrittenPreviously; //word was already stored to raw file in previous processing
       int _ReadoutCycle; //current ReadoutCycle in the run
       int _countRocFrom; //from which ReadOutCycle number should be counted. By default (_countRocFrom==0)the first ROC=0. This number will be added to ReadOutCycles_counted_from_0 and will make the ROC in the data
@@ -292,7 +298,7 @@ void caliceahcalbifProducer::OpenRawFile(unsigned param, bool _writerawfilename_
 }
 
 void caliceahcalbifProducer::DoStartRun() {
-   std::cout << "Starting Run" << std::endl;
+   std::cout << "Starting Run " << GetRunNumber() << std::endl;
    _deqEvent.clear();
    _ReadoutCycle = -1;
    _stats= {0,0,0,0};
@@ -343,7 +349,7 @@ void caliceahcalbifProducer::DoStartRun() {
 }
 
 void caliceahcalbifProducer::DoStopRun() {
-   std::cout << "Stop Run" << std::endl;
+   std::cout << "Stop Run" << GetRunNumber() << std::endl;
    _TLUStarted = false;
    _TLUJustStopped = true;
    while (_TLUJustStopped) {
