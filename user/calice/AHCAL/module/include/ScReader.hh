@@ -31,7 +31,7 @@ namespace eudaq {
 
    class ScReader: public AHCALReader {
       public:
-         virtual void Read(std::deque<char> & buf, std::deque<eudaq::EventUP> & deqEvent) override;
+         virtual void Read(std::deque<unsigned char> & buf, std::deque<eudaq::EventUP> & deqEvent) override;
          virtual void OnStart(int runNo) override;
          virtual void OnStop(int waitQueueTimeS) override;
          virtual void OnConfigLED(std::string _fname) override; //chose configuration file for LED runs
@@ -39,7 +39,7 @@ namespace eudaq {
 
 //         virtual std::deque<eudaq::RawEvent *> NewEvent_createRawDataEvent(std::deque<eudaq::RawEvent *> deqEvent, bool tempcome, int LdaRawcycle,
 //         bool newForced);
-         virtual void readTemperature(std::deque<char>& buf);
+         virtual void readTemperature(std::deque<unsigned char>& buf);
 
          virtual void setTbTimestamp(uint32_t ts) override;
          virtual uint32_t getTbTimestamp() const override;
@@ -105,7 +105,7 @@ namespace eudaq {
             SLOWCONTROL = (unsigned int) 0x0002,
          };
          enum {
-            e_sizeLdaHeader = 10 // 8bytes + 0xcdcd
+            e_sizeLdaHeader = (int)10 // 8bytes + 0xcdcd
          };
          enum BufferProcessigExceptions {
             ERR_INCOMPLETE_INFO_CYCLE, OK_ALL_READ, OK_NEED_MORE_DATA
@@ -132,8 +132,8 @@ namespace eudaq {
          static const unsigned int C_TS_IGNORE_ROC_JUMPS_UP_TO = 20;
          static const uint64_t C_MILLISECOND_TICS = 40000; //how many clock cycles make a millisecond
 
-         void readAHCALData(std::deque<char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
-         void readLDATimestamp(std::deque<char> &buf, std::map<int, LDATimeData> &LDATimestamps);
+         void readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
+         void readLDATimestamp(std::deque<unsigned char> &buf, std::map<int, LDATimeData> &LDATimestamps);
          eudaq::EventUP insertMissedTrigger(const int roc, const uint64_t startTS, const int lastBuiltEventNr, const int ErrorStatus);
 
          bool IsBXIDComplete(const int roc, const int AhcalBxid, std::map<int, std::vector<std::vector<int> > >::const_iterator sameBxidPacketIterator,
@@ -146,7 +146,7 @@ namespace eudaq {
          int _cycleNo; //last successfully read readoutcycle: ASIC Data
          int _cycleNoTS;// last timestamp cycle number
          unsigned int _trigID; //last successfully read trigger ID from LDA timestamp. Next trigger should be _trigID+1
-         unsigned int length; //length of the packed derived from LDA Header
+         int length; //length of the packed derived from LDA Header
 
          //bool _tempmode; // during the temperature readout time
          bool _buffer_inside_acquisition; //the reader is reading data from within the acquisition, defined by start and stop commands

@@ -148,7 +148,7 @@ namespace eudaq {
       //    usleep(000);
    }
 
-   void ScReader::Read(std::deque<char> & buf, std::deque<eudaq::EventUP> & deqEvent) {
+   void ScReader::Read(std::deque<unsigned char> & buf, std::deque<eudaq::EventUP> & deqEvent) {
       static const unsigned char magic_sc[2] = { 0xac, 0xdc };    // find slow control info
       static const unsigned char magic_led[2] = { 0xda, 0xc1 };    // find LED voltages info
       static const unsigned char magic_data[2] = { 0xcd, 0xcd };    // find data (temp, timestamp, asic
@@ -162,11 +162,13 @@ namespace eudaq {
          while (1) {
             // Look into the buffer to find settings info: LED, slow control, and the magic word that
             // points to the beginning of the data stream
-            while (buf.size() > 1) {
+            while (true) {
+               int bufsize = buf.size();
+               if (bufsize < 2) break;               //gcc compiler somehow compiles wrongly this condition, which would be normally in the while ()
 
                // Read LABVIEW LED information (always present)
                if ((_unfinishedPacketState == UnfinishedPacketStates::DONE) && ((unsigned char) buf[0] == magic_led[0])) {
-                  if (buf.size() < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
+                  if (bufsize < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                   std::cout << "DEBUG: trying to read LED information" << std::endl;
                   if ((unsigned char) buf[1] == magic_led[1]) {
                      //|| (_unfinishedPacketState & UnfinishedPacketStates::LEDINFO)
@@ -174,9 +176,9 @@ namespace eudaq {
                      //                  if (_unfinishedPacketState & UnfinishedPacketStates::LEDINFO) ibuf = 0;//continue with the packet
                      //                  _unfinishedPacketState|= UnfinishedPacketStates::LEDINFO;
                      int layerN = (unsigned char) buf[ibuf];
-                     if (buf.size() < (3 + layerN * 4)) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
+                     if (bufsize < (3 + layerN * 4)) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                      ledInfo.push_back(layerN);                  //save the number of layers
-                     while (buf.size() > ibuf && (unsigned char) buf[ibuf] != magic_data[0] && (ibuf + 1) < (layerN * 4)) {
+                     while (bufsize > ibuf && (unsigned char) buf[ibuf] != magic_data[0] && (ibuf + 1) < (layerN * 4)) {
                         ibuf++;
                         int ledId = (unsigned char) buf[ibuf];	//layer id
                         ledInfo.push_back(ledId);
@@ -200,7 +202,7 @@ namespace eudaq {
 
                // read LABVIEW SlowControl Information (always present)
                if ((_unfinishedPacketState == UnfinishedPacketStates::SLOWCONTROL) || ((unsigned char) buf[0] == magic_sc[0])) {
-                  if (buf.size() < 2) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
+                  if (bufsize < 2) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                   if ((_unfinishedPacketState == UnfinishedPacketStates::SLOWCONTROL) || ((unsigned char) buf[1] == magic_sc[1])) {
                      int ibuf = 2;
                      if (_unfinishedPacketState == UnfinishedPacketStates::SLOWCONTROL) ibuf = 0;
@@ -209,8 +211,8 @@ namespace eudaq {
 
                      //TODO this is wrong - it will break, when 0xCD will be in the slowcontrol stream
                      //TODO this is wrong again - it will brake when the complete slowcontrol will be not contained fully in the buffer
-                     while (buf.size() > ibuf) {
-                        if (buf.size() < ibuf + 2) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
+                     while (bufsize > ibuf) {
+                        if (bufsize < ibuf + 2) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                         //check whether the data doesn't look like a magic packet header of another type:
                         if (((unsigned char) buf[ibuf] == magic_data[0]) && ((unsigned char) buf[ibuf + 1] == magic_data[1])) {
                            std::cout << "DEBUG: magic of data found" << std::endl;
@@ -251,9 +253,9 @@ namespace eudaq {
                if ((_unfinishedPacketState == UnfinishedPacketStates::DONE) && ((unsigned char) buf[0] == magic_hvadj[0])) {
 
 //                  std::cout << "Debug: trying to read HVADJ" << std::endl;
-                  if (buf.size() < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
+                  if (bufsize < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
                   if ((unsigned char) buf[1] == magic_hvadj[1]) {
-                     if (buf.size() < (2 + 10 + 1)) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE; //we need a complete packet
+                     if (bufsize < (2 + 10 + 1)) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE; //we need a complete packet
                      if (((unsigned char) buf[10] != 0xAB) || ((unsigned char) buf[11] != 0xAB)) {
                         std::cout << "ERROR: unknown data (hvadjustment): "; //<< to_hex(buf[0]) << std::endl;
                         for (int i = 0; i < 12; i++)
@@ -286,8 +288,9 @@ namespace eudaq {
                std::cout << "!" << to_hex(buf[0], 2);
                buf.pop_front();            //when nothing match, throw away
             }
-
-            if (buf.size() <= e_sizeLdaHeader) throw BufferProcessigExceptions::OK_ALL_READ; // all data read
+            int bufsize = buf.size();
+            if (bufsize <= e_sizeLdaHeader) throw BufferProcessigExceptions::OK_ALL_READ; // all data read
+            if (bufsize < 14) throw BufferProcessigExceptions::OK_NEED_MORE_DATA;
 
             //decode the LDA packet header
             //----------------------------
@@ -319,22 +322,34 @@ namespace eudaq {
             //(14) .. type: ASIC readout packet
             //(15) .. type: a readout packet (can be also temperature...)
             length = (((unsigned char) buf[3] << 8) + (unsigned char) buf[2]);      //*2;
+            if (bufsize <= (e_sizeLdaHeader + length)) {
+               //std::cout << "DEBUG: not enough space in the buffer: " << bufsize << ", required " << to_string(e_sizeLdaHeader + length) << std::endl;
+               throw BufferProcessigExceptions::OK_NEED_MORE_DATA;      //not enough data in the buffer
+            } else {
+               // std::cout << "DEBUG size OK" << std::endl;
+            }
+
             unsigned int LDA_Header_cycle = (unsigned char) buf[4];      //from LDA packet header - 8 bits only!
             //std::cout<<"LDA_Header_cycle"<<std::endl;
             unsigned char status = buf[9];
             bool TempFlag = (status == 0xa0 && buf[10] == 0x41 && buf[11] == 0x43 && buf[12] == 0x7a && buf[13] == 0);
             bool TimestampFlag = (status == 0x08 && buf[10] == 0x45 && buf[11] == 0x4D && buf[12] == 0x49 && buf[13] == 0x54);
 
-            if (buf.size() <= e_sizeLdaHeader + length) {
-//               std::cout << "DEBUG: not enough space in the buffer: " << buf.size() << ", required" << to_string(e_sizeLdaHeader + length) << std::endl;
-               throw BufferProcessigExceptions::OK_NEED_MORE_DATA;      //not enough data in the buffer
-            }
-
 //            uint16_t rawTrigID = 0;
 
             if (TempFlag == true) {
 //               std::cout << "DEBUG: Reading Temperature, ROC " << LDA_Header_cycle << std::endl;
                readTemperature(buf);
+               if (length != 16) std::cout << "ERROR temperature length " << length << std::endl;
+               if (((unsigned char) buf[24] != 0xAB) || ((unsigned char) buf[25] != 0xAB)) {
+                  printf("ERROR wrong Temp footer. Expecting ab ab, got: %02x %02x\n", (unsigned char) buf[24], (unsigned char) buf[25]);
+                  std::cout << "DEBUG Temp";
+                  for (int i = 0; i < e_sizeLdaHeader + length; i++) {
+                     printf(" %02x", (unsigned char) buf[i]);
+                  }
+                  std::cout << " size=" << bufsize << std::endl;
+                  std::cout << "DEBUG: processing temp buffer size: " << bufsize << ", required " << to_string(e_sizeLdaHeader + length) << std::endl;
+               }
                continue;
             }
             if (TimestampFlag) {
@@ -367,7 +382,7 @@ namespace eudaq {
                continue;
             }
 
-            deque<char>::iterator it = buf.begin() + e_sizeLdaHeader;
+            deque<unsigned char>::iterator it = buf.begin() + e_sizeLdaHeader;
 
             // ASIC DATA 0x4341 0x4148
             if ((it[0] == C_PKTHDR_ASICDATA[0]) && (it[1] == C_PKTHDR_ASICDATA[1]) && (it[2] == C_PKTHDR_ASICDATA[2]) && (it[3] == C_PKTHDR_ASICDATA[3])) {
@@ -439,6 +454,7 @@ namespace eudaq {
             lda = _vecTemp[i].first.first;
             port = _vecTemp[i].first.second;
             data = _vecTemp[i].second;
+            if (lda > 15) std::cout << "ERROR: temperature data copy ScReader::appendOtherInfo: lda=" << lda << std::endl;
             output.push_back(lda);
             output.push_back(port);
             output.push_back(data);
@@ -1135,8 +1151,9 @@ namespace eudaq {
       EventQueue.push_back(std::move(nev));
    }
 
-   void ScReader::readTemperature(std::deque<char> &buf) {
+   void ScReader::readTemperature(std::deque<unsigned char> &buf) {
       int lda = buf[6];
+      if (lda > 15) std::cout << "ERROR! wrong LDA number " << lda << std::endl;
       int port = buf[7];
       short data = ((unsigned char) buf[23] << 8) + (unsigned char) buf[22];
 //std::cout << "DEBUG reading Temperature, length=" << length << " lda=" << lda << " port=" << port << std::endl;
@@ -1145,12 +1162,12 @@ namespace eudaq {
       buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
    }
 
-   void ScReader::readAHCALData(std::deque<char> &buf, std::map<int, std::vector<std::vector<int> > >& AHCALData) {
+   void ScReader::readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > >& AHCALData) {
 //AHCALData[_cycleNo];
       unsigned int LDA_Header_cycle = (unsigned char) buf[4];                     //from LDA packet header - 8 bits only!
       unsigned int LDA_Header_port = buf[7];                     //Port number from LDA header
       auto old_cycleNo = _cycleNo;
-      _cycleNo = updateCntModulo(_cycleNo, LDA_Header_cycle, 8, _producer->getMaxRocJump());                     //update the 32 bit counter with 8bit counter
+      _cycleNo = updateCntModulo(_cycleNo, LDA_Header_cycle, 8, _producer->getMaxRocJump());                 //update the 32 bit counter with 8bit counter
       int8_t cycle_difference = _cycleNo - old_cycleNo;                     //LDA_Header_cycle - (old_cycleNo & 0xFF);
       if (cycle_difference < (0 - _producer->getMaxRocJump())) {      //received a data from previous ROC. should not happen
          cout << "Received data from much older ROC in run " << _runNo << ". Global ROC=" << _cycleNo << " (" << _cycleNo % 256 << " modulo 256), received="
@@ -1168,7 +1185,7 @@ namespace eudaq {
 //data from the readoutcycle.
       std::vector<std::vector<int> >& readoutCycle = AHCALData.insert( { _cycleNo, std::vector<std::vector<int> >() }).first->second;
 
-      deque<char>::iterator buffer_it = buf.begin() + e_sizeLdaHeader;
+      deque<unsigned char>::iterator buffer_it = buf.begin() + e_sizeLdaHeader;
 
 // footer check: ABAB
       if ((unsigned char) buffer_it[length - 2] != 0xab || (unsigned char) buffer_it[length - 1] != 0xab) {
@@ -1282,7 +1299,7 @@ namespace eudaq {
       buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
    }
 
-   void ScReader::readLDATimestamp(std::deque<char> &buf, std::map<int, LDATimeData>& LDATimestamps) {
+   void ScReader::readLDATimestamp(std::deque<unsigned char> &buf, std::map<int, LDATimeData>& LDATimestamps) {
       unsigned char TStype = buf[14]; //type of timestamp (only for Timestamp packets)
       unsigned int LDA_Header_cycle = (unsigned char) buf[4]; //from LDA packet header - 8 bits only!
       unsigned int LDA_cycle = _cycleNoTS; //copy from the global readout cycle.

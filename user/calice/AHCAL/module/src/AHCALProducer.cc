@@ -97,7 +97,7 @@ void AHCALProducer::DoConfigure() {
    _ChipidAddAfterMasking = param.Get("ChipidAddAfterMasking", 0);
    _AppendDifidToChipidBitPosition = param.Get("AppendDifidToChipidBitPosition", -1);
    _minimumBxid = param.Get("MinimumBxid", 0);
-   _maximumBxid= param.Get("MaximumBxid", 4095);
+   _maximumBxid = param.Get("MaximumBxid", 4095);
    _minEventHits = param.Get("MinimumEventHits", 1); //count of contributing ASICs
 
    uint32_t timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
@@ -348,12 +348,12 @@ void AHCALProducer::sendallevents(std::deque<eudaq::EventUP> & deqEvent, int min
 void AHCALProducer::RunLoop() {
    std::cout << " Main Run loop " << std::endl;
    //StartCommandReceiver();
-   deque<char> bufRead;
+   deque<unsigned char> bufRead;
    // deque for events: add one event when new acqId is arrived: to be determined in reader
 //      deque<eudaq::RawDataEvent *> deqEvent2;
    std::deque<eudaq::EventUP> deqEvent;
 
-   const int bufsize = 4 * 1024;
+   const int bufsize = 256 * 4 * 1024;
    // copy to C array, then to vector
    char buf[bufsize]; //buffer to read from TCP socket
    //while (!_terminated) {

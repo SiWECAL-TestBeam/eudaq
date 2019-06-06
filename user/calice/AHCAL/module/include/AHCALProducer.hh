@@ -16,7 +16,7 @@ namespace eudaq {
 
    class AHCALReader {
       public:
-         virtual void Read(std::deque<char> & buf, std::deque<eudaq::EventUP> & deqEvent) = 0;
+         virtual void Read(std::deque<unsigned char> & buf, std::deque<eudaq::EventUP> & deqEvent) = 0;
          virtual void buildEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
          }
          virtual void OnStart(int runNo) {

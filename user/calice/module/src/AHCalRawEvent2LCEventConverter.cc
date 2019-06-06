@@ -26,6 +26,7 @@ namespace eudaq {
    }
 
    static const char* EVENT_TYPE = "CaliceObject";
+   int m_debug_lastEventtEvent;
 
    class CaliceLCGenericObject: public lcio::LCGenericObjectImpl {
       public:
@@ -53,6 +54,7 @@ namespace eudaq {
       // try to cast the Event
       auto& source = *(d1.get());
       auto& result = *(d2.get());
+      m_debug_lastEventtEvent = source.GetEventN();
       //
       uint64_t tbTimestamp = source.GetTag("tbTimestamp", 0);
       time_t shiftedUnixTS = 0L; //reconstructed timestamp of older run
@@ -218,7 +220,6 @@ namespace eudaq {
             if (bl8.size() > 0) {
                LCCollectionVec *col = 0;
                col = createCollectionVec(result, "HVAdjInfo", "i:LDA,i:port,i:Module,i:0,i:HV1,i:HV2,i:HV3,i:0", timestamp, DAQquality);
-               getScCALTemperatureSubEvent(bl8, col);
                getScCALHVSubEvent(bl8, col);
             }
             auto bl9 = rawev->GetBlock(nblock++);            //not yet used
@@ -259,7 +260,7 @@ namespace eudaq {
    void AHCalRawEvent2LCEventConverter::getScCALTemperatureSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
 
       // sensor specific data
-      cout << "Looking for Temperature Collection... " << endl;
+      cout << "Looking for Temperature Collection... Evt " << m_debug_lastEventtEvent << "Size" << bl.size() << endl;
       vector<int> vec;
       vec.resize(bl.size() / sizeof(int));
       memcpy(&vec[0], &bl[0], bl.size());
@@ -270,7 +271,8 @@ namespace eudaq {
       for (unsigned int i = 0; i < vec.size() - 2; i += 3) {
          if ((i / 3) % 2 == 0) continue; // just ignore the first measurement data;
          if ((output.size() != 0) && (port != vec[i + 1]) && (lda != vec[i])) {
-            cout << "Different port number comes before getting 8 temperature measurements!." << endl;
+            cout << "Unfinished 8 temperature measurements!. LDA " << lda << "->" << vec[i] << ", port " << port << "->" << vec[i + 1] << ", data="
+                  << vec[i + 2] << ", size=" << output.size() << ", i=" << i << " EuEvt=" << m_debug_lastEventtEvent << endl;
             output.clear();
          }
          lda = vec[i];
