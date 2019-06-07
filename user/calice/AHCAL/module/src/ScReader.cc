@@ -1312,7 +1312,7 @@ namespace eudaq {
       unsigned int LDA_cycle = _cycleNoTS; //copy from the global readout cycle.
 
       LDA_cycle = updateCntModulo(LDA_cycle, LDA_Header_cycle, 8, 127); //TODO _producer->getMaxRocJump()
-      int difference = std::abs(LDA_cycle - _cycleNoTS);
+      int difference = std::abs((int)LDA_cycle - _cycleNoTS);
       if (difference > _producer->getMaxRocJump()) {
          EUDAQ_ERROR_STREAMOUT(
                "LDA TS too big jump! Run=" + to_string(_runNo) + ". AHCAL ROC=" + to_string(_cycleNo) + " TS ROC=" + to_string(_cycleNoTS) + " ("
