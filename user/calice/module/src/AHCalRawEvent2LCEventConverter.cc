@@ -59,10 +59,10 @@ namespace eudaq {
       uint64_t tbTimestamp = source.GetTag("tbTimestamp", 0);
       time_t shiftedUnixTS = 0L; //reconstructed timestamp of older run
       //DAQ_ERROR_STATUS
-      int eudaqErrorStatus = source.GetTag("DAQ_ERROR_STATUS", 0);
-      result.parameters().setValue("DaqErrorStatus", eudaqErrorStatus);
       auto bl0 = source.GetBlock(0);
       string colName((char *) &bl0.front(), bl0.size());
+      int eudaqErrorStatus = source.GetTag("DAQ_ERROR_STATUS", 0);
+      if (colName == "EUDAQDataScCAL") result.parameters().setValue("DaqErrorStatus", eudaqErrorStatus);
       int RawLDATrigId = source.GetTag("RawLDATrigId", -1);
       if (RawLDATrigId != -1) result.parameters().setValue("RawLDATrigId", RawLDATrigId);
       if (tbTimestamp > 0) {
