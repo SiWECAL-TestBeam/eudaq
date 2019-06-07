@@ -260,7 +260,7 @@ namespace eudaq {
    void AHCalRawEvent2LCEventConverter::getScCALTemperatureSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
 
       // sensor specific data
-      cout << "Looking for Temperature Collection... Evt " << m_debug_lastEventtEvent << "Size" << bl.size() << endl;
+      cout << "Looking for Temperature Collection... Evt=" << m_debug_lastEventtEvent << ", Size=" << bl.size() << endl;
       vector<int> vec;
       vec.resize(bl.size() / sizeof(int));
       memcpy(&vec[0], &bl[0], bl.size());
