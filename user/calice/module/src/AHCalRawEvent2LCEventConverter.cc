@@ -70,7 +70,7 @@ namespace eudaq {
             double ts = source.GetTimestampBegin();
             uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + (ts * 0.78125);
             shiftedUnixTS = tbTimestamp + (ts / 1280000000);
-            //result.setTimeStamp(eventTsNanoSeconds);
+            result.setTimeStamp(eventTsNanoSeconds);//timestamp from BIF. Should be overwritten by the AHCAL timestamp later
          }
          if (colName == "EUDAQDataScCAL") {
             uint64_t ts = source.GetTimestampBegin();
