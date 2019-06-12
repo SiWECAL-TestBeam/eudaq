@@ -369,18 +369,7 @@ inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
       auto ev_sync = eudaq::Event::MakeUnique("CaliceBxid");
       ev_sync->SetFlagPacket();
       uint64_t timestampBegin, timestampEnd;
-      if ((roc_ahcal == processedRoc) && (bxid_ahcal == processedBxid)) {
-         if (!m_que_ahcal.empty()) {
-
-            timestampBegin= m_que_ahcal.front()->GetTimestampBegin();
-            timestampEnd=m_que_ahcal.front()->GetTimestampEnd();
-            ev_sync->SetTimestamp(timestampBegin,timestampEnd);
-            ev_sync->AddSubEvent(std::move(m_que_ahcal.front()));
-            m_que_ahcal.pop_front();
-            present_ahcal = true;
-         }
-      }
-
+      //Reordered: BIF might need to go first, as it overwrites the slcio timestamp
       if ((roc_bif == processedRoc) && (bxid_bif == processedBxid)) {
          if (!m_que_bif.empty()) {
             ev_sync->AddSubEvent(std::move(m_que_bif.front()));
@@ -409,6 +398,18 @@ inline void CaliceAhcalBifBxidDataCollector::BuildEvent_bxid() {
          ev_sync->AddSubEvent(std::move(m_que_desytable.front()));
          m_que_desytable.pop_front();
          present_desytable = true;
+      }
+      //Reordered: AHCAL should go last: the last events overwrites the timestamp in slcio
+      if ((roc_ahcal == processedRoc) && (bxid_ahcal == processedBxid)) {
+         if (!m_que_ahcal.empty()) {
+
+            timestampBegin= m_que_ahcal.front()->GetTimestampBegin();
+            timestampEnd=m_que_ahcal.front()->GetTimestampEnd();
+            ev_sync->SetTimestamp(timestampBegin,timestampEnd);
+            ev_sync->AddSubEvent(std::move(m_que_ahcal.front()));
+            m_que_ahcal.pop_front();
+            present_ahcal = true;
+         }
       }
       m_thrown_incomplete += 1; //increase in case the loop is exit in following lines
       if (m_evt_mandatory_ahcal && (!present_ahcal) && (m_active_ahcal)) continue; //throw awway incomplete event
