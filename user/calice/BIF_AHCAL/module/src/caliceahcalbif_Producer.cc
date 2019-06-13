@@ -56,22 +56,16 @@ class caliceahcalbifProducer: public eudaq::Producer {
       caliceahcalbifProducer::EventNumbering _eventNumberingPreference;
 
       unsigned m_run;
-      unsigned readout_delay;
-      bool done;
-      bool _TLUStarted;
-      bool _TLUJustStopped;
-      std::unique_ptr<caliceahcalbifController> m_tlu;
-      bool _BORESent;
+      unsigned readout_delay;bool done;bool _TLUStarted;bool _TLUJustStopped;
+      std::unique_ptr<caliceahcalbifController> m_tlu;bool _BORESent;
 
       // debug output
-      double _WaitAfterStopSeconds;
-      bool _dumpRaw; //print events to screen
+      double _WaitAfterStopSeconds;bool _dumpRaw; //print events to screen
       int _dumpCycleInfoLevel; // print Readout cycle summary
       int _dumpTriggerInfoLevel; // print detailed info about each trigger
       bool _dumpSummary; // print summary after the end of run
       bool _writeRaw; //write to separate file
-      std::string _rawFilename;
-      bool _writerawfilename_timestamp; //whether to append timestamp to the raw file
+      std::string _rawFilename;bool _writerawfilename_timestamp; //whether to append timestamp to the raw file
       bool _word1WrittenPreviously; //word was already stored to raw file in previous processing
       int _ReadoutCycle; //current ReadoutCycle in the run
       int _countRocFrom; //from which ReadOutCycle number should be counted. By default (_countRocFrom==0)the first ROC=0. This number will be added to ReadOutCycles_counted_from_0 and will make the ROC in the data
@@ -82,7 +76,7 @@ class caliceahcalbifProducer: public eudaq::Producer {
       uint32_t _acq_start_cycle; //raw cycle number of the acq start. Direct copy from the packet (no correction for starting the run from cycle 0
       uint32_t _trigger_id; //last trigger raw event number
 
-      uint32_t _timestampTbCampaign;
+      uint64_t _timestampTbCampaign;
 
       std::vector<uint32_t> _cycleData; //data, that will be sent to eudaq rawEvent
       bool _ROC_started; //true when start acquisition was preceeding
@@ -216,7 +210,7 @@ void caliceahcalbifProducer::DoConfigure() {
    _WaitAfterStopSeconds = param.Get("WaitAfterStopSeconds", 1.0);
    _redirectedInputFileName = param.Get("RedirectInputFromFile", "");
 
-   _timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
+   _timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0LLU);
 
    std::string eventBuildingMode = param.Get("EventBuildingMode", "ROC");
    if (!eventBuildingMode.compare("ROC")) _eventBuildingMode = caliceahcalbifProducer::EventBuildingMode::ROC;
@@ -875,49 +869,53 @@ void caliceahcalbifProducer::buildEudaqEventsBxid(std::deque<eudaq::EventUP>& de
    int lastBxid = INT_MIN;
    int lastTrigNumber = INT_MIN;
    std::vector<uint32_t> data;   //data field for eudaq packet
-   auto ev = eudaq::Event::MakeUnique("CaliceObject");
-   if (_eventNumberingPreference == EventNumbering::TIMESTAMP) ev->SetFlagTimestamp();
-   if (_eventNumberingPreference == EventNumbering::TRIGGERNUMBER) ev->SetFlagTrigger();
-   ev->SetTag("ROCStartTS", _acq_start_ts);
-   std::string s = "EUDAQDataBIF";
-   ev->AddBlock(0, s.c_str(), s.length());
-   s = "i:Type,i:EventCnt,i:TS_Low,i:TS_High";
-   ev->AddBlock(1, s.c_str(), s.length());
-   unsigned int times[2];
-   struct timeval tv;
-   ::gettimeofday(&tv, NULL);
-   times[0] = tv.tv_sec;
-   times[1] = tv.tv_usec;
-   ev->AddBlock(2, times, sizeof(times));
-   ev->AddBlock(3, std::vector<uint8_t>());
-   ev->AddBlock(4, std::vector<uint8_t>());
-   ev->AddBlock(5, std::vector<uint8_t>());
-   std::copy(start_packet.begin(), start_packet.end(), std::back_inserter(data));
-   ev->SetTag("ROC", _ReadoutCycle + _countRocFrom);
+
+//   eudaq::EventUP ev = eudaq::Event::MakeUnique("CaliceObject");
+//   if (_eventNumberingPreference == EventNumbering::TIMESTAMP) ev->SetFlagTimestamp();
+//   if (_eventNumberingPreference == EventNumbering::TRIGGERNUMBER) ev->SetFlagTrigger();
+//   ev->SetTag("ROCStartTS", _acq_start_ts);
+//   std::string s = "EUDAQDataBIF";
+//   ev->AddBlock(0, s.c_str(), s.length());
+//   s = "i:Type,i:EventCnt,i:TS_Low,i:TS_High";
+//   ev->AddBlock(1, s.c_str(), s.length());
+//   unsigned int times[2];
+//   struct timeval tv;
+//   ::gettimeofday(&tv, NULL);
+//   times[0] = tv.tv_sec;
+//   times[1] = tv.tv_usec;
+//   ev->AddBlock(2, times, sizeof(times));
+//   ev->AddBlock(3, std::vector<uint8_t>());
+//   ev->AddBlock(4, std::vector<uint8_t>());
+//   ev->AddBlock(5, std::vector<uint8_t>());
+//   //std::copy(start_packet.begin(), start_packet.end(), std::back_inserter(data));
+//   ev->SetTag("ROC", _ReadoutCycle + _countRocFrom);
 //   std::cout << "< ROC=" << _ReadoutCycle + _countRocFrom << ", ";
+   uint32_t firstTriggerNInBxid = 0;
+   uint64_t firstTriggerTsInBxid = 0LLU;
    for (auto trigger : trigger_packets) {
       uint64_t trig_ts = ((uint64_t) trigger[2] + (((uint64_t) trigger[3]) << 32));
       uint32_t trig_number = trigger[1];
       int bxid = (((int64_t) trig_ts - (int64_t) (_acq_start_ts << 5) - (int64_t) _firstBxidOffsetBins) / _bxidLengthBins);
       if (lastBxid != INT_MIN) {   //if ev already contains a trigger record
-         if ((trig_number == lastTrigNumber) || (bxid == lastBxid)) {   //the same bxid
-            //std::copy(trigger.begin(), trigger.end(), std::back_inserter(data));
+         if (bxid == lastBxid) {   //the same bxid
+            std::copy(trigger.begin(), trigger.end(), std::back_inserter(data));
             //we will addpend this event to the same bxid
             if (_dumpCycleInfoLevel || _dumpTriggerInfoLevel) std::cout << "+";
             //std::cout << "#Adding trigger. ROC=" << _ReadoutCycle + _countRocFrom << ", BXID=" << bxid << ", Trig#= " << trig_number  << std::endl;
          } else {            //different bxid
             //previous event must be closed and send out first
-            ev->SetTimestamp(trig_ts, trig_ts + 1, false);
+            eudaq::EventUP ev = eudaq::Event::MakeUnique("CaliceObject");
             std::copy(stop_packet.begin(), stop_packet.end(), std::back_inserter(data));
-            ev->AddBlock(6, data);
-            deqEvent.push_back(std::move(ev));
-            data.clear();
-            lastBxid = INT_MIN;
-            //initialize new event:
             ev = eudaq::Event::MakeUnique("CaliceObject");
+            ev->SetTimestamp(firstTriggerTsInBxid, firstTriggerTsInBxid + 1, false);
             if (_eventNumberingPreference == EventNumbering::TIMESTAMP) ev->SetFlagTimestamp();
             if (_eventNumberingPreference == EventNumbering::TRIGGERNUMBER) ev->SetFlagTrigger();
             ev->SetTag("ROCStartTS", _acq_start_ts);
+            ev->SetTag("ROCStopTS", _acq_stop_ts);
+            ev->SetTag("ROC", _ReadoutCycle + _countRocFrom);
+            ev->SetTag("BXID", lastBxid);
+            ev->SetTriggerN(firstTriggerNInBxid, false);
+            if (_timestampTbCampaign) ev->SetTag("tbTimestamp", _timestampTbCampaign);
             std::string s = "EUDAQDataBIF";
             ev->AddBlock(0, s.c_str(), s.length());
             s = "i:Type,i:EventCnt,i:TS_Low,i:TS_High";
@@ -931,22 +929,50 @@ void caliceahcalbifProducer::buildEudaqEventsBxid(std::deque<eudaq::EventUP>& de
             ev->AddBlock(3, std::vector<uint8_t>());
             ev->AddBlock(4, std::vector<uint8_t>());
             ev->AddBlock(5, std::vector<uint8_t>());
-            std::copy(start_packet.begin(), start_packet.end(), std::back_inserter(data));
-            ev->SetTriggerN(trig_number - _firstTriggerNumber, false);            //save the trigger number only for the first trigger
-            ev->SetTag("ROC", _ReadoutCycle + _countRocFrom);
+            ev->AddBlock(6, data);
+            deqEvent.push_back(std::move(ev));
+
+            firstTriggerNInBxid = trig_number - _firstTriggerNumber;
+            firstTriggerTsInBxid = trig_ts;
+            data.clear();
          }
       } else {            //no trigger in the event yet
-         ev->SetTriggerN(trig_number - _firstTriggerNumber, false);            //save the trigger number only for the first trigger
+         firstTriggerNInBxid = trig_number - _firstTriggerNumber;
+         firstTriggerTsInBxid = trig_ts;
          std::copy(trigger.begin(), trigger.end(), std::back_inserter(data));
-         ev->SetTriggerN(trig_number - _firstTriggerNumber, false);            //save the trigger number only for the first trigger
-         lastTrigNumber = trig_number - _firstTriggerNumber;
+//         ev->SetTriggerN(trig_number - _firstTriggerNumber, false);            //save the trigger number only for the first trigger
       }
-      ev->SetTag("BXID", bxid);
+//      ev->SetTag("BXID", bxid);
       lastBxid = bxid;
+      lastTrigNumber = trig_number - _firstTriggerNumber;
+      std::copy(start_packet.begin(), start_packet.end(), std::back_inserter(data));
       std::copy(trigger.begin(), trigger.end(), std::back_inserter(data));
    }
-   if (lastBxid != INT_MIN) {
+   if (lastBxid != INT_MIN) { //at least 1 trigger in the data
       std::copy(stop_packet.begin(), stop_packet.end(), std::back_inserter(data));
+      eudaq::EventUP ev = eudaq::Event::MakeUnique("CaliceObject");
+      ev->SetTimestamp(firstTriggerTsInBxid, firstTriggerTsInBxid + 1, false);
+      if (_eventNumberingPreference == EventNumbering::TIMESTAMP) ev->SetFlagTimestamp();
+      if (_eventNumberingPreference == EventNumbering::TRIGGERNUMBER) ev->SetFlagTrigger();
+      ev->SetTag("ROCStartTS", _acq_start_ts);
+      ev->SetTag("ROCStopTS", _acq_stop_ts);
+      ev->SetTag("ROC", _ReadoutCycle + _countRocFrom);
+      ev->SetTag("BXID", lastBxid);
+      ev->SetTriggerN(firstTriggerNInBxid, false);
+      if (_timestampTbCampaign) ev->SetTag("tbTimestamp", _timestampTbCampaign);
+      std::string s = "EUDAQDataBIF";
+      ev->AddBlock(0, s.c_str(), s.length());
+      s = "i:Type,i:EventCnt,i:TS_Low,i:TS_High";
+      ev->AddBlock(1, s.c_str(), s.length());
+      unsigned int times[2];
+      struct timeval tv;
+      ::gettimeofday(&tv, NULL);
+      times[0] = tv.tv_sec;
+      times[1] = tv.tv_usec;
+      ev->AddBlock(2, times, sizeof(times));
+      ev->AddBlock(3, std::vector<uint8_t>());
+      ev->AddBlock(4, std::vector<uint8_t>());
+      ev->AddBlock(5, std::vector<uint8_t>());
       ev->AddBlock(6, data);
       //std::cout<<"here the timestamp"<<std::endl;
       deqEvent.push_back(std::move(ev));
