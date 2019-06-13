@@ -153,7 +153,7 @@ void AhcalRunControl::Exec() {
                   if (elem.first == "ReprocessingFinished") {
                      if (stoi(elem.second) == 1) {
 //                        restart_run = true;
-                        m_inactivity_timeout = 5;
+                        m_inactivity_timeout = 30;
                      }
                   }
                }
