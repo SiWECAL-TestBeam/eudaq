@@ -67,10 +67,10 @@ namespace eudaq {
       if (RawLDATrigId != -1) result.parameters().setValue("RawLDATrigId", RawLDATrigId);
       if (tbTimestamp > 0) {
          if (colName == "EUDAQDataBIF") {
-            double ts = source.GetTimestampBegin();
-            uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + (ts * 0.78125);
+            uint64_t ts = source.GetTimestampBegin();
+            uint64_t eventTsNanoSeconds = tbTimestamp * 1000000000 + ((ts * 4000) / 5120);
             shiftedUnixTS = tbTimestamp + (ts / 1280000000);
-            result.setTimeStamp(eventTsNanoSeconds);//timestamp from BIF. Should be overwritten by the AHCAL timestamp later
+            result.setTimeStamp(eventTsNanoSeconds);      //timestamp from BIF. Should be overwritten by the AHCAL timestamp later
          }
          if (colName == "EUDAQDataScCAL") {
             uint64_t ts = source.GetTimestampBegin();
