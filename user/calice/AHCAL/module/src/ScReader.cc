@@ -788,6 +788,7 @@ namespace eudaq {
             eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
             eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
             prepareEudaqRawPacket(nev_raw);
+            if (_producer->getInsertDummyPackets()) nev->SetTag("Dummy", 0); //set the flag if dummy events can occur in the output data - this is not a dummy event
             nev->SetTag("ROC", processedROC);
             nev->SetTag("BXID", triggerBxid);
             nev->SetTag("ROCStartTS", startTS);
