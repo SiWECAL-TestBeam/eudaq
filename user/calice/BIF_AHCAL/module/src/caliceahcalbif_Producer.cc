@@ -60,7 +60,9 @@ class caliceahcalbifProducer: public eudaq::Producer {
       std::unique_ptr<caliceahcalbifController> m_tlu;bool _BORESent;
 
       // debug output
-      double _WaitAfterStopSeconds;bool _dumpRaw; //print events to screen
+      int _StartWaitMilliSeconds;
+      double _WaitAfterStopSeconds;
+      bool _dumpRaw; //print events to screen
       int _dumpCycleInfoLevel; // print Readout cycle summary
       int _dumpTriggerInfoLevel; // print detailed info about each trigger
       bool _dumpSummary; // print summary after the end of run
@@ -151,7 +153,7 @@ void caliceahcalbifProducer::RunLoop() {
       justStopped = _TLUJustStopped; //copy  this variable, so that it doesnt change within the main loop
       if (_TLUStarted || justStopped) {
          if (_redirectedInputFileName.length()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(3000)); //otherwise we might be too early with data sending, even before ahcal connects to the datacollector
+            std::this_thread::sleep_for(std::chrono::milliseconds(_StartWaitMilliSeconds)); //otherwise we might be too early with data sending, even before ahcal connects to the datacollector
          }
          while (true) {               //loop until all data from BIF is processed
             bool FetchResult = FetchBifDataWasSuccessfull();
@@ -207,6 +209,7 @@ void caliceahcalbifProducer::DoConfigure() {
    _bxidLengthNs = param.Get("BxidLengthNs", 4000);
    _bxidLengthBins = static_cast<int>(((double) _bxidLengthNs) / timestamp_resolution_ns);
    std::cout << "DEBUG bxid length in bins: " << _bxidLengthBins << std::endl;
+   _StartWaitMilliSeconds= param.Get("StartWaitMilliSeconds", 1000);
    _WaitAfterStopSeconds = param.Get("WaitAfterStopSeconds", 1.0);
    _redirectedInputFileName = param.Get("RedirectInputFromFile", "");
 
