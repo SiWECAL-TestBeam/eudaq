@@ -21,6 +21,7 @@ class AhcalRunControl: public eudaq::RunControl {
       std::string m_monitored_collector; //collector name, which is used for checking of the increment
       uint32_t m_inactivity_timeout; //timeout in seconds. If no change in the monitored data collector after the timeout, run will stop.
       uint32_t m_monitored_event; //currently last seen event number
+      uint32_t m_reprocessing_inactivity_timeout;// how long to wait for constant number of events after ReprocessingFinished is raised.
       std::chrono::time_point<std::chrono::steady_clock> m_last_change_time;
       bool m_flag_running;
       std::chrono::steady_clock::time_point m_tp_start_run;
@@ -63,6 +64,7 @@ void AhcalRunControl::Configure() {
    m_next_conf_path = conf->Get("NEXT_RUN_CONF_FILE", "");
    m_inactivity_timeout = conf->Get("STOP_INCATIVITY_SECONDS", 1000000);
    m_monitored_collector = conf->Get("MONITORED_COLLECTOR_NAME", "");
+   m_reprocessing_inactivity_timeout=conf->Get("REPROCESSING_INACTIVITY_TIMEOUT",20);
    if (conf->Get("RUN_NUMBER", 0)) {
       EUDAQ_INFO_STREAMOUT("Setting new Run number (from conf): " + std::to_string(conf->Get("RUN_NUMBER", 0)), std::cout, std::cerr);
       SetRunN(conf->Get("RUN_NUMBER", 0));
@@ -153,7 +155,7 @@ void AhcalRunControl::Exec() {
                   if (elem.first == "ReprocessingFinished") {
                      if (stoi(elem.second) == 1) {
 //                        restart_run = true;
-                        m_inactivity_timeout = 30;
+                        m_inactivity_timeout = m_reprocessing_inactivity_timeout;
                      }
                   }
                }
