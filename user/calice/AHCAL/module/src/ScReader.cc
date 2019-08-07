@@ -1314,12 +1314,17 @@ namespace eudaq {
       unsigned char TStype = buf[14]; //type of timestamp (only for Timestamp packets)
       unsigned int LDA_Header_cycle = (unsigned char) buf[4]; //from LDA packet header - 8 bits only!
       unsigned int LDA_cycle = _cycleNoTS; //copy from the global readout cycle.
+      uint16_t rawTrigID = ((uint16_t) ((unsigned char) buf[16])) | (((uint16_t) ((unsigned char) buf[17])) << 8); //potentially, but valid only when type is trigger
+      uint64_t timestamp = ((uint64_t) ((unsigned char) buf[18]) + (((uint64_t) ((unsigned char) buf[19])) << 8)
+                     + (((uint64_t) ((unsigned char) buf[20])) << 16) + (((uint64_t) ((unsigned char) buf[21])) << 24)
+                     + (((uint64_t) ((unsigned char) buf[22])) << 32) + (((uint64_t) ((unsigned char) buf[23])) << 40));
 
+      printf("DEBUG Raw LDATS: type=0x%02x ROC=%d GROC=%d TrID=%d TS=%llx\n", TStype, LDA_Header_cycle,_cycleNoTS,rawTrigID, timestamp);
       LDA_cycle = updateCntModulo(LDA_cycle, LDA_Header_cycle, 8, 127); //TODO _producer->getMaxRocJump()
       int difference = std::abs((int)LDA_cycle - _cycleNoTS);
       if (difference > _producer->getMaxRocJump()) {
          EUDAQ_ERROR_STREAMOUT(
-               "LDA TS too big jump! Run=" + to_string(_runNo) + ". AHCAL ROC=" + to_string(_cycleNo) + " TS ROC=" + to_string(_cycleNoTS) + " ("
+               "LDA TS too big ROC jump! Run=" + to_string(_runNo) + ". AHCAL ROC=" + to_string(_cycleNo) + " TS ROC=" + to_string(_cycleNoTS) + " ("
                      + to_string(_cycleNoTS % 256) + " modulo 256), received=" + to_string((int )LDA_Header_cycle) + " Type=" + to_string((int )TStype),
                std::cout, std::cerr);
       }
@@ -1328,8 +1333,9 @@ namespace eudaq {
       if ((!_buffer_inside_acquisition) && (TStype == C_TSTYPE_TRIGID_INC)) {
 //cout << "WARNING ScReader: Trigger is outside acquisition! Cycle " << LDA_cycle << endl;
 //         std::cout << "!";
-         LDA_cycle--; //fix, that cycle is incremented outside the acquisition by the stop command
-         LDA_Header_cycle--; //fix, that cycle is incremented outside the acquisition by the stop command
+    	  // fix of a fix. let's try without adjusting
+    	  //LDA_cycle--; //fix, that cycle is incremented outside the acquisition by the stop command
+    	  //LDA_Header_cycle--; //fix, that cycle is incremented outside the acquisition by the stop command
          _RunTimesStatistics.triggers_outside_roc++;
 //uncomment if want to ignore trigger information from outside of ROC
 //buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
@@ -1375,10 +1381,6 @@ namespace eudaq {
          }
 //std::cout << "DEBUG: processing TS from LDA cycle after correction " << LDA_cycle << std::endl;
          LDATimeData & currentROCData = LDATimestamps.insert( { LDA_cycle, LDATimeData() }).first->second;         //uses the existing one or creates new
-
-         uint64_t timestamp = ((uint64_t) ((unsigned char) buf[18]) + (((uint64_t) ((unsigned char) buf[19])) << 8)
-               + (((uint64_t) ((unsigned char) buf[20])) << 16) + (((uint64_t) ((unsigned char) buf[21])) << 24)
-               + (((uint64_t) ((unsigned char) buf[22])) << 32) + (((uint64_t) ((unsigned char) buf[23])) << 40));
 
          if (TStype == C_TSTYPE_START_ACQ) {
             if (_buffer_inside_acquisition) {
@@ -1429,7 +1431,6 @@ namespace eudaq {
          }
 
          if (TStype == C_TSTYPE_TRIGID_INC) { //TODO
-            uint16_t rawTrigID = ((uint16_t) ((unsigned char) buf[16])) | (((uint16_t) ((unsigned char) buf[17])) << 8);
 
             int16_t trigIDdifference = rawTrigID - (_trigID & 0xFFFF);
 
