@@ -59,6 +59,8 @@ CorrelationHistos::CorrelationHistos(SimpleStandardPlane p1,
   m_pitchX2=1;
   m_pitchY2=1;
 
+  //std::cout<<"DEBUG S1="<<_sensor1<<" S2="<<_sensor2<<std::endl;
+  
   if(_sensor1=="MIMOSA26"){
     m_pitchX1=18.4;
     m_pitchY1=18.4;
@@ -70,6 +72,14 @@ CorrelationHistos::CorrelationHistos(SimpleStandardPlane p1,
   if(!_sensor1.compare(0,3,"ABC")){
     m_pitchX1=74.5;
     m_pitchY1=74.5;
+  }
+  if(_sensor1=="alpide"){
+    m_pitchX1=29.24;
+    m_pitchY1=26.88;
+  }
+  if(_sensor1=="AHCAL Layer"){
+    m_pitchX1=30150.0;
+    m_pitchY1=30150.0;
   }
 
   if(_sensor2=="MIMOSA26"){
@@ -83,6 +93,14 @@ CorrelationHistos::CorrelationHistos(SimpleStandardPlane p1,
   if(!_sensor2.compare(0,3,"ABC")){
     m_pitchX2=74.5;
     m_pitchY2=74.5;
+  }
+  if(_sensor2=="alpide"){
+    m_pitchX2=29.24;
+    m_pitchY2=26.88;
+  }
+  if(_sensor2=="AHCAL Layer"){
+    m_pitchX2=30150.0;
+    m_pitchY2=30150.0;
   }
 
   if (_maxX1 != -1 && _maxX2 != -1) {
