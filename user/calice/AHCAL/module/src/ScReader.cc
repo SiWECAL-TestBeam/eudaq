@@ -1319,7 +1319,7 @@ namespace eudaq {
                      + (((uint64_t) ((unsigned char) buf[20])) << 16) + (((uint64_t) ((unsigned char) buf[21])) << 24)
                      + (((uint64_t) ((unsigned char) buf[22])) << 32) + (((uint64_t) ((unsigned char) buf[23])) << 40));
 
-      printf("DEBUG Raw LDATS: type=0x%02x ROC=%d GROC=%d TrID=%d TS=%llx\n", TStype, LDA_Header_cycle,_cycleNoTS,rawTrigID, timestamp);
+      //printf("DEBUG Raw LDATS: type=0x%02x ROC=%d GROC=%d TrID=%d TS=%llx\n", TStype, LDA_Header_cycle,_cycleNoTS,rawTrigID, timestamp);
       LDA_cycle = updateCntModulo(LDA_cycle, LDA_Header_cycle, 8, 127); //TODO _producer->getMaxRocJump()
       int difference = std::abs((int)LDA_cycle - _cycleNoTS);
       if (difference > _producer->getMaxRocJump()) {
