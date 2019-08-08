@@ -536,7 +536,7 @@ namespace eudaq {
                std::cout << "Info: Possibly incomplete BXID=" << AhcalBxid << " in ROC=" << roc << ". Another layer got full at bxid="
                      << minLastBxid_Detector[roc] << std::endl;
             }
-            if (AhcalBxid > (minLastBxid_Detector[roc] + 4)) {
+            if (AhcalBxid > (minLastBxid_Detector[roc] + 5*4000/(_producer->getAhcalbxidWidth()) ) ) {
                EUDAQ_ERROR_STREAMOUT(
                      "BXID " + to_string(AhcalBxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
                            + " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
