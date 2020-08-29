@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <chrono>
+#include <thread>
 #include "AidaTluI2c.hh"
 #include "AidaTluHardware.hh"
 #include "AidaTluPowerModule.hh"
@@ -132,6 +134,7 @@ namespace tlu {
 
     void ResetCounters() {
       SetSerdesRst(0x2);
+      std::this_thread::sleep_for( std::chrono::milliseconds(200));
       SetSerdesRst(0x0);
     };
 

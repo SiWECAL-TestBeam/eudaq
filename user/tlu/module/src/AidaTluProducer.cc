@@ -53,9 +53,18 @@ AidaTluProducer::AidaTluProducer(const std::string name, const std::string &runc
 void AidaTluProducer::RunLoop(){
   std::unique_lock<std::mutex> lk(m_mtx_tlu);
   bool isbegin = true;
+
+  m_tlu->SetTriggerVeto(1, m_verbose);
+  m_tlu->SetRunActive(0, 1);
+  m_tlu->SetEnableRecordData(0);
+  std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+  m_tlu->ResetSerdes();
   m_tlu->ResetCounters();
-  m_tlu->ResetEventsBuffer();
+  m_tlu->ResetTimestamp();
   m_tlu->ResetFIFO();
+  m_tlu->ResetEventsBuffer();
+  std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+  m_tlu->SetEnableRecordData(1);
 
   // Pause the TLU to allow slow devices to get ready after the euRunControl has
   // issued the DoStart() command
@@ -118,9 +127,10 @@ void AidaTluProducer::RunLoop(){
       delete data;
     }
   }
+
   m_tlu->SetTriggerVeto(1, m_verbose);
-  // Set TLU internal logic to stop.
   m_tlu->SetRunActive(0, 1);
+  m_tlu->SetEnableRecordData(0);
 }
 
 void AidaTluProducer::DoInitialise(){
@@ -138,64 +148,58 @@ void AidaTluProducer::DoInitialise(){
   uhal_node = ini->Get("DeviceName",uhal_node);
   m_tlu = std::unique_ptr<tlu::AidaTluController>(new tlu::AidaTluController(uhal_conn, uhal_node));
 
-  if( ini->Get("skipini", false) ){
-    EUDAQ_INFO("TLU SKIPPING INITIALIZATION (skipini = 1)");
-  }
-  else{
 
-    m_verbose = abs(ini->Get("verbose", 0));
-    EUDAQ_INFO("TLU VERBOSITY SET TO: " + std::to_string(m_verbose));
+  m_verbose = abs(ini->Get("verbose", 0));
+  
 
     // Define constants
-    m_tlu->DefineConst(ini->Get("nDUTs", 4), ini->Get("nTrgIn", 6));
+  m_tlu->DefineConst(4, 6);
 
-    // Import I2C addresses for hardware
-    // Populate address list for I2C elements
-    m_tlu->SetI2C_core_addr(ini->Get("I2C_COREEXP_Addr", 0x21));
-    m_tlu->SetI2C_clockChip_addr(ini->Get("I2C_CLK_Addr", 0x68));
-    m_tlu->SetI2C_DAC1_addr(ini->Get("I2C_DAC1_Addr",0x13) );
-    m_tlu->SetI2C_DAC2_addr(ini->Get("I2C_DAC2_Addr",0x1f) );
-    m_tlu->SetI2C_EEPROM_addr(ini->Get("I2C_ID_Addr", 0x50) );
-    m_tlu->SetI2C_expander1_addr(ini->Get("I2C_EXP1_Addr",0x74));
-    m_tlu->SetI2C_expander2_addr(ini->Get("I2C_EXP2_Addr",0x75) );
-    m_tlu->SetI2C_pwrmdl_addr(ini->Get("I2C_DACModule_Addr",  0x1C), ini->Get("I2C_EXP1Module_Addr",  0x76), ini->Get("I2C_EXP2Module_Addr",  0x77), ini->Get("I2C_pwrId_Addr",  0x51));
-    m_tlu->SetI2C_disp_addr(ini->Get("I2C_disp_Addr",0x3A));
+  // Import I2C addresses for hardware
+  // Populate address list for I2C elements
+  m_tlu->SetI2C_core_addr( 0x21);
+  m_tlu->SetI2C_clockChip_addr(0x68);
+  m_tlu->SetI2C_DAC1_addr(0x13);
+  m_tlu->SetI2C_DAC2_addr(0x1f);
+  m_tlu->SetI2C_EEPROM_addr(0x50);
+  m_tlu->SetI2C_expander1_addr(0x74);
+  m_tlu->SetI2C_expander2_addr(0x75);
+  m_tlu->SetI2C_pwrmdl_addr( 0x1C,  0x76, 0x77, 0x51);
+  m_tlu->SetI2C_disp_addr(0x3A);
 
-    // Initialize TLU hardware
-    m_tlu->InitializeI2C(m_verbose);
-    m_tlu->InitializeIOexp(m_verbose);
-    if (ini->Get("intRefOn", false)){
-      m_tlu->InitializeDAC(ini->Get("intRefOn", false), ini->Get("VRefInt", 2.5), m_verbose);
+  // Initialize TLU hardware
+  m_tlu->InitializeI2C(m_verbose);
+  m_tlu->InitializeIOexp(m_verbose);
+  m_tlu->InitializeDAC(false, 1.3, m_verbose);
+  // Initialize the Si5345 clock chip using pre-generated file
+  if (ini->Get("CONFCLOCK", true)){
+    std::string  clkConfFile;
+    std::string defaultCfgFile= "./../user/eudet/misc/hw_conf/aida_tlu/fmctlu_clock_config.txt";
+    clkConfFile= ini->Get("CLOCK_CFG_FILE", defaultCfgFile);
+    if (clkConfFile== defaultCfgFile){
+      EUDAQ_WARN("TLU: Could not find the parameter for clock configuration in the INI file. Using the default.");
     }
-    else{
-      m_tlu->InitializeDAC(ini->Get("intRefOn", false), ini->Get("VRefExt", 1.3), m_verbose);
+    int clkres;
+    clkres= m_tlu->InitializeClkChip( clkConfFile, m_verbose  );
+    if (clkres == -1){
+      EUDAQ_ERROR("TLU: clock configuration failed.");
     }
-
-    // Initialize the Si5345 clock chip using pre-generated file
-    if (ini->Get("CONFCLOCK", true)){
-      std::string  clkConfFile;
-      std::string defaultCfgFile= "./../user/eudet/misc/hw_conf/aida_tlu/fmctlu_clock_config.txt";
-      clkConfFile= ini->Get("CLOCK_CFG_FILE", defaultCfgFile);
-      if (clkConfFile== defaultCfgFile){
-        EUDAQ_WARN("TLU: Could not find the parameter for clock configuration in the INI file. Using the default.");
-      }
-      int clkres;
-      clkres= m_tlu->InitializeClkChip( clkConfFile, m_verbose  );
-      if (clkres == -1){
-        EUDAQ_ERROR("TLU: clock configuration failed.");
-      }
-    }
-
-    // Reset IPBus registers
-    m_tlu->ResetSerdes();
-    m_tlu->ResetCounters();
-    m_tlu->SetTriggerVeto(1, m_verbose);
-    m_tlu->ResetFIFO();
-    m_tlu->ResetEventsBuffer();
-
-    m_tlu->ResetTimestamp();
-
   }
+
+
+  // reset status
+  m_tlu->SetTriggerVeto(1, m_verbose);
+  m_tlu->SetRunActive(0, 1);
+  m_tlu->SetEnableRecordData(0);
+  m_tlu->SetInternalTriggerFrequency(0, m_verbose );
+  m_tlu->SetTriggerMask( 0,  0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  m_tlu->ResetSerdes();
+  m_tlu->ResetCounters();
+  m_tlu->ResetTimestamp();
+  m_tlu->ResetFIFO();
+  m_tlu->ResetEventsBuffer();
 }
 
 void AidaTluProducer::DoConfigure() {
