@@ -7,6 +7,7 @@
 #include <iostream>
 #include <ostream>
 #include <vector>
+#include <climits>
 //#include <memory> //unique_ptr
 
 using eudaq::to_string;
