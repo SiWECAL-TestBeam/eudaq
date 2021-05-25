@@ -12,7 +12,7 @@ export RCPORT=44000
 export HOSTIP=localhost
 #################  Run control ###################
 #xterm -sb -sl 1000000 -T "Runcontrol" -e './bin/euRun -n RunControl ; read '&
-xterm -sb -sl 100000 -T "Runcontrol" -e './bin/euRun -n AhcalRunControl |tee -a data/logs/runcontrol_${currentdate}.log; read '&
+xterm -sb -sl 100000 -T "Runcontrol" -e './bin/euRun -n RunControl |tee -a data/logs/runcontrol_${currentdate}.log; read '&
 sleep 2
 #################  Log collector #################
 xterm -sb -sl 1000 -geometry 160x30 -T "Logger" -e './bin/euLog -r tcp://$HOSTIP:$RCPORT|tee --append data/logs/logcollector_${currentdate} ;read' &

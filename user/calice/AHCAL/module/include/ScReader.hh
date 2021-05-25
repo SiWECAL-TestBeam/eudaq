@@ -132,6 +132,7 @@ namespace eudaq {
          static const unsigned int C_TS_IGNORE_ROC_JUMPS_UP_TO = 20;
          static const uint64_t C_MILLISECOND_TICS = 40000; //how many clock cycles make a millisecond
 
+         void readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
          void readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
          void readLDATimestamp(std::deque<unsigned char> &buf, std::map<int, LDATimeData> &LDATimestamps);
          eudaq::EventUP insertMissedTrigger(const int roc, const uint64_t startTS, const int lastBuiltEventNr, const int ErrorStatus);
