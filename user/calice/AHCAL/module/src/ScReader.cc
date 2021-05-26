@@ -3,6 +3,9 @@
 #include "ScReader.hh"
 #include "AHCALProducer.hh"
 
+#include "KLauS_ROPackets.h"
+#include "KLauS_Data.h"
+
 #include "eudaq/Logger.hh"
 
 #include <iostream>
@@ -176,7 +179,7 @@ namespace eudaq {
 
 					// Read LABVIEW LED information (always present)
 					if ((_unfinishedPacketState == UnfinishedPacketStates::DONE) && ((unsigned char) buf[0] == magic_led[0])) {
-//                  std::cout << "DEBUG      magicled" << std::endl << std::flush;
+                  std::cout << "DEBUG      magicled" << std::endl << std::flush;
 						if (bufsize < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
 						std::cout << "DEBUG: trying to read LED information" << std::endl;
 						if ((unsigned char) buf[1] == magic_led[1]) {
@@ -211,7 +214,7 @@ namespace eudaq {
 
 					// read LABVIEW SlowControl Information (always present)
 					if ((_unfinishedPacketState == UnfinishedPacketStates::SLOWCONTROL) || ((unsigned char) buf[0] == magic_sc[0])) {
-//                  std::cout << "DEBUG      magicsc" << std::endl;
+                  std::cout << "DEBUG      magicsc" << std::endl;
 						if (bufsize < 2) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
 						if ((_unfinishedPacketState == UnfinishedPacketStates::SLOWCONTROL) || ((unsigned char) buf[1] == magic_sc[1])) {
 							int ibuf = 2;
@@ -261,7 +264,7 @@ namespace eudaq {
 
 					//read HV adjustemts
 					if ((_unfinishedPacketState == UnfinishedPacketStates::DONE) && ((unsigned char) buf[0] == magic_hvadj[0])) {
-//                  std::cout << "DEBUG      magicled" << std::endl << std::flush;
+                  std::cout << "DEBUG      magicHV" << std::endl << std::flush;
 //                  std::cout << "Debug: trying to read HVADJ" << std::endl;
 						if (bufsize < 3) throw BufferProcessigExceptions::ERR_INCOMPLETE_INFO_CYCLE;
 						if ((unsigned char) buf[1] == magic_hvadj[1]) {
@@ -344,7 +347,7 @@ namespace eudaq {
 				}
 
 				unsigned int LDA_Header_cycle = (unsigned char) buf[4];      //from LDA packet header - 8 bits only!
-				//std::cout<<"LDA_Header_cycle"<<std::endl;
+				std::cout<<"LDA_Header_cycle"<<std::endl;
 				unsigned char statusHi = buf[9];
 				unsigned char statusLo = buf[8];
 				bool TempFlag = (statusHi == 0xa0 && buf[10] == 0x41 && buf[11] == 0x43 && buf[12] == 0x7a && buf[13] == 0);
@@ -394,7 +397,8 @@ namespace eudaq {
 						}
 						if ((dataPart[0] == 0x41) && (dataPart[1] == 0x43)) {
 							//possibility of SPIROC and KLAUS
-							readKLAUSData(buf, _LDAAsicData);
+							std::cout << "DEBUG: Analyzing KLAUS data, ROC " << LDA_Header_cycle << std::endl;
+							readKLAUSData(buf, _LDAKLAUSAsicData);
 							continue;
 						}
 					}
@@ -426,7 +430,7 @@ namespace eudaq {
 				// AHCAL ASIC DATA 0x4341 0x4148
 				if ((dataPart[0] == C_PKTHDR_SPIROCDATA[0]) && (dataPart[1] == C_PKTHDR_SPIROCDATA[1]) && (dataPart[2] == C_PKTHDR_SPIROCDATA[2])
 						&& (dataPart[3] == C_PKTHDR_SPIROCDATA[3])) {
-					//std::cout << "DEBUG: Analyzing AHCAL data, ROC " << LDA_Header_cycle << std::endl;
+					std::cout << "DEBUG: Analyzing AHCAL data, ROC " << LDA_Header_cycle << std::endl;
 					readAHCALData(buf, _LDAAsicData);
 				} else {
 					cout << "ScReader: header invalid. Received" << to_hex(dataPart[0]) << " " << to_hex(dataPart[1]) << " " << to_hex(dataPart[2]) << " "
@@ -1208,7 +1212,7 @@ namespace eudaq {
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}
 
-	void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData) {
+	void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
 		//structure of the AHCALData
 		// it is a map, which maps a vector (a list) of ASIC data frames corresponding to a single bxid (single memory cell) to a readoutcycle number
 		// the nested vector<int> cosists of:
@@ -1216,9 +1220,11 @@ namespace eudaq {
 		//   1 - bxid
 		//   2 - memory cell
 		//   3 - chipid
-		//   4 - number of channels (NChannel)
-		//   5..NChannel+5 - TDC
-		//   Nchannels+6..2*NChannels+6 - ADC
+		//   4 - number of channels (NChannel)				number of hits
+		//   								Channel[nHits]
+		//   								Gainbit[nHits]
+		//   5..NChannel+5 - TDC					TDC [nHits]
+		//   Nchannels+6..2*NChannels+6 - ADC				ADC [nHits]
 
 		//for ahcal SPIROC packet: the packet is sliced into individual memory cells (same bxid)
 
@@ -1231,13 +1237,76 @@ namespace eudaq {
 			std::cout << to_hex(buf[i], 2) << " ";
 		}
 		std::cout << std::endl;
-
 		std::cout << "DEBUG KLAUS packet: ";
 		for (int i = e_sizeLdaHeader; i < length + e_sizeLdaHeader; i++) {
 			std::cout << to_hex(buf[i], 2) << " ";
 		}
 		std::cout << std::endl;
 
+		LDA_PKT pkt(buf,length+e_sizeLdaHeader);
+		pkt.PrintLDAHDR();
+		pkt.PrintRoPKTHDR();
+//		unsigned int LDA_Header_port = buf[7];                     //Port number from LDA header
+//
+//Get ROC number from packet
+/*
+		auto old_cycleNo = _cycleNo;
+		_cycleNo = updateCntModulo(_cycleNo, pkt.HDR_ROC(), 8, _producer->getMaxRocJump());                 //update the 32 bit counter with 8bit counter
+		int8_t cycle_difference = _cycleNo - old_cycleNo;                     //LDA_Header_cycle - (old_cycleNo & 0xFF);
+		if (cycle_difference < (0 - _producer->getMaxRocJump())) {      //received a data from previous ROC. should not happen
+			cout << "Received data from much older ROC in run " << _runNo << ". Global ROC=" << _cycleNo << " (" << _cycleNo % 256 << " modulo 256), received="
+					<< pkt.HDR_ROC() << endl;
+			EUDAQ_EXTRA(
+					"Received data from much older ROC in run " + to_string(_runNo) + ". Global ROC=" + to_string(_cycleNo) + " (" + to_string(_cycleNo % 256)
+							+ " modulo 256), received=" + to_string(pkt.HDR_ROC()));
+		}
+		if (cycle_difference > _producer->getMaxRocJump()) {
+			_cycleNo = old_cycleNo;
+			cout << "ERROR: Jump in run " << _runNo << " in data readoutcycle by " << to_string((int) cycle_difference) << "in ROC " << _cycleNo << endl;
+			EUDAQ_ERROR("Jump in run " + to_string(_runNo) + "in data readoutcycle by " + to_string((int )cycle_difference) + "in ROC " + to_string(_cycleNo));
+//         if (cycle_difference < 20) _cycleNo += cycle_difference; //we compensate only small difference
+		}
+*/
+
+
+// footer check: ABAB
+		//if ((unsigned char) buffer_it[length - 2] != 0xab || (unsigned char) buffer_it[length - 1] != 0xab) {
+		if (!pkt.IsFooterOK()) {
+			deque<unsigned char>::iterator buffer_it = buf.begin() + e_sizeLdaHeader;
+			cout << "Footer abab invalid:" << (unsigned int) (unsigned char) buffer_it[length - 2] << " "
+					<< (unsigned int) (unsigned char) buffer_it[length - 1]
+					<< endl;
+			EUDAQ_WARN(
+					"Footer abab invalid:" + to_string((unsigned int )(unsigned char )buffer_it[length - 2]) + " "
+							+ to_string((unsigned int )(unsigned char )buffer_it[length - 1]));
+		}
+//Get&Fill hit data from the readoutcycle.
+		auto &readoutCycle = AHCALData.insert( { _cycleNo, std::vector<KLauS_Hit>() }).first->second;
+
+//Parse hit data payload
+		if(pkt.IsK5HitData() && pkt.PayloadLen8()%6 == 0){
+			pkt.Reorder();
+			printf("Parsing hit data payload\n");
+			auto ptr=pkt.PayloadStart();
+			KLauS_Hit::PrintHeader();
+			while(ptr < pkt.PayloadEnd())
+			{
+				if(ptr[0]!=0xfe){//non-empty hit?
+					//KLauS_Hit hit(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
+					readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
+					readoutCycle.back().Print();
+				}else{//empty hits are not saved
+					printf("-- Empty\n");
+				}
+				ptr+=6;
+			}
+		}else{
+			std::cout << "DEBUG NON-KLAUS5 Packet or data length mismatch"<<std::endl;
+		}
+
+
+
+		/*
 		//data can be accessed like this:
 		int cycleNo = _cycleNo; //you can adjust the cycle number
 		std::vector<std::vector<int> > &readoutCycle = AHCALData.insert( { _cycleNo, std::vector<std::vector<int> >() }).first->second;
@@ -1272,6 +1341,7 @@ namespace eudaq {
 
 		readoutCycle.push_back(std::move(memCellData)); //add the memory cell (bxid) data slice to the array of slices in the same readoutcycle
 
+		*/
 		//finally, the data from the packet can be discarded
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}

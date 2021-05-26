@@ -3,6 +3,7 @@
 
 #include "AHCALProducer.hh"
 #include "eudaq/RawEvent.hh"
+#include "KLauS_Data.h"
 
 #include <deque>
 
@@ -132,7 +133,7 @@ namespace eudaq {
          static const unsigned int C_TS_IGNORE_ROC_JUMPS_UP_TO = 20;
          static const uint64_t C_MILLISECOND_TICS = 40000; //how many clock cycles make a millisecond
 
-         void readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
+         void readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData);
          void readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData);
          void readLDATimestamp(std::deque<unsigned char> &buf, std::map<int, LDATimeData> &LDATimestamps);
          eudaq::EventUP insertMissedTrigger(const int roc, const uint64_t startTS, const int lastBuiltEventNr, const int ErrorStatus);
@@ -165,7 +166,8 @@ namespace eudaq {
          std::map<int, LDATimeData> _LDATimestampData; //maps READOUTCYCLE to LDA timestamps for that cycle (comes asynchronously with the data and tends to arrive before the ASIC packets)
 
          std::map<int, std::vector<std::vector<int> > > _LDAAsicData;              //maps readoutcycle to vector of "infodata"
-
+         std::map<int, std::vector<KLauS_Hit> > _LDAKLAUSAsicData;              //maps readoutcycle to vector of klaus hits
+//-- create LDA data structure for KLauS data
          std::map<int, int> _DaqErrors;              // <ReadoutCycleNumber, ErrorMask> if errormas is 0, everything is OK
 
          std::map<int, int> minLastBxid_Detector;              //stores the minimum! lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
