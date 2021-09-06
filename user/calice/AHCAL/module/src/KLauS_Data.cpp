@@ -6,15 +6,17 @@
 
 void KLauS_Hit::PrintHeader(FILE* fd)
 {
-	fprintf(fd,"CHANNEL\tGS\tADC_10b\tADC_6b\tPIPE\tTime\n");
+	fprintf(fd,"ROC\tASIC\tCHANNEL\tGS\tADC_10b\tADC_6b\tPIPE\tTime\n");
 }
 
 void KLauS_Hit::Print(FILE* fd)
 {
-	fprintf(fd,"%2.2u\t%1.1u\t%3.3u\t%2.2u\t%3.3u\t%d\n",
-		channel,
-		gainsel_evt,
-		ADC_10b,
+	fprintf(fd,"%4.4u\t%2.2u\t%2.2u\t%1.1u\t%3.3u\t%2.2u\t%3.3u\t%u\n",
+		this->GetROC(),
+		this->GetASICNumber(),
+		this->GetASICChannel(),
+		this->GetGainBit(),
+		this->GetADC_10b(),
 		ADC_6b,
 		ADC_PIPE,
 		this->GetTime()

@@ -39,18 +39,20 @@ class KLauS_Hit
 		void		Parse(std::deque<unsigned char>::iterator event, unsigned char asic=0);
 
 		//Charge information
-		unsigned short GetADC_10b() const;
-		unsigned short GetADC_12b() const;
+		unsigned short GetADC_10b() const{return ADC_10b;};
+		unsigned short GetADC_12b() const{return ADC_6b<<8+ADC_PIPE;};
 		bool GetGainBit() const {return gainsel_evt;};
 
 		//Channel information
 		unsigned short GetChannelUnique() const{if(channel!=0xff) return channel+chipID*36; else return 10000+chipID;};
 		unsigned short GetASICChannel() const{return channel;};
+		unsigned short GetASICNumber(){return chipID;};
 
 		//Time information. Time is always given in 200ps bins.
 		// transfer the time from raw data (Gray to decimal / CC+MC+FC) and get the time interval wrt the last event 
 		virtual unsigned long GetTime() const;
 		int 		DiffTime(KLauS_Hit& evt) const;
+		unsigned short GetROC(){return m_ROC;};
 		// Print 
 		static void	PrintHeader(FILE* fd=stdout);
 		void		Print(FILE* fd=stdout);
