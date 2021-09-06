@@ -145,6 +145,7 @@ namespace eudaq {
 
          int _runNo;
          int _cycleNo; //last successfully read readoutcycle: ASIC Data
+         int _cycleNoK; //last successfully read readoutcycle: KLauS ASIC Data
          int _cycleNoTS;// last timestamp cycle number
          unsigned int _trigID; //last successfully read trigger ID from LDA timestamp. Next trigger should be _trigID+1
          bool _trigidNotKnown;

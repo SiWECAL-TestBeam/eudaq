@@ -19,9 +19,9 @@ using namespace std;
 namespace eudaq {
 
 	ScReader::ScReader(AHCALProducer *r) :
-			AHCALReader(r), _runNo(-1), _buffer_inside_acquisition(false), _lastBuiltEventNr(0), _cycleNo(0),
-					//               _tempmode(false),
-					_trigID(0), _unfinishedPacketState(UnfinishedPacketStates::DONE), length(0) {
+			AHCALReader(r), _runNo(-1), _buffer_inside_acquisition(false), _lastBuiltEventNr(0),
+			_cycleNoK(0), _cycleNo(0),_cycleNoTS(0),
+			_trigID(0), _unfinishedPacketState(UnfinishedPacketStates::DONE), length(0) {
 	}
 
 	ScReader::~ScReader() {
@@ -30,12 +30,14 @@ namespace eudaq {
 	void ScReader::OnStart(int runNo) {
 		_runNo = runNo;
 		_cycleNo = -1;
+		_cycleNoK = -1;
 		_cycleNoTS = -1;
 		_trigID = _producer->getLdaTrigidStartsFrom() - 1;
 		_trigidNotKnown = true;
 //      _tempmode = false;
 		cycleData.resize(6);
 		_LDAAsicData.clear(); //erase(_LDAAsicData.begin(), _LDAAsicData.end()); //clear();
+		_LDAKLAUSAsicData.clear();
 		_LDATimestampData.clear();
 		_RunTimesStatistics.clear();
 		_DaqErrors.clear();
@@ -114,9 +116,14 @@ namespace eudaq {
 		std::this_thread::sleep_for(std::chrono::seconds(waitQueueTimeS));
 		std::cout << "ScREader::OnStop after sleep()... " << std::endl;
 		_RunTimesStatistics.print(std::cout, _producer->getColoredTerminalMessages());
-		std::cout << "DEBUG: MAP sizes: " << _LDAAsicData.size() << "\t" << _LDATimestampData.size() << "\t last ROC: ";
+		std::cout << "DEBUG: MAP sizes (SPIROC): " << _LDAAsicData.size() << "\t" << " (KLAUS): " << _LDAKLAUSAsicData.size() << "\t" << _LDATimestampData.size() << "\t last ROC: ";
 		if (_LDAAsicData.crbegin() != _LDAAsicData.crend()) {
 			std::cout << _LDAAsicData.crbegin()->first;
+		} else
+			std::cout << "N/A";
+		std::cout << "\t";
+		if (_LDAKLAUSAsicData.crbegin() != _LDAKLAUSAsicData.crend()) {
+			std::cout << _LDAKLAUSAsicData.crbegin()->first;
 		} else
 			std::cout << "N/A";
 		std::cout << "\t";
@@ -347,7 +354,7 @@ namespace eudaq {
 				}
 
 				unsigned int LDA_Header_cycle = (unsigned char) buf[4];      //from LDA packet header - 8 bits only!
-				std::cout<<"LDA_Header_cycle"<<std::endl;
+				//std::cout<<"LDA_Header_cycle"<<std::endl;
 				unsigned char statusHi = buf[9];
 				unsigned char statusLo = buf[8];
 				bool TempFlag = (statusHi == 0xa0 && buf[10] == 0x41 && buf[11] == 0x43 && buf[12] == 0x7a && buf[13] == 0);
@@ -397,7 +404,7 @@ namespace eudaq {
 						}
 						if ((dataPart[0] == 0x41) && (dataPart[1] == 0x43)) {
 							//possibility of SPIROC and KLAUS
-							std::cout << "DEBUG: Analyzing KLAUS data, ROC " << LDA_Header_cycle << std::endl;
+							//std::cout << "DEBUG: Analyzing KLAUS data, ROC " << LDA_Header_cycle << std::endl;
 							readKLAUSData(buf, _LDAKLAUSAsicData);
 							continue;
 						}
@@ -430,7 +437,7 @@ namespace eudaq {
 				// AHCAL ASIC DATA 0x4341 0x4148
 				if ((dataPart[0] == C_PKTHDR_SPIROCDATA[0]) && (dataPart[1] == C_PKTHDR_SPIROCDATA[1]) && (dataPart[2] == C_PKTHDR_SPIROCDATA[2])
 						&& (dataPart[3] == C_PKTHDR_SPIROCDATA[3])) {
-					std::cout << "DEBUG: Analyzing AHCAL data, ROC " << LDA_Header_cycle << std::endl;
+					//std::cout << "DEBUG: Analyzing AHCAL data, ROC " << LDA_Header_cycle << std::endl;
 					readAHCALData(buf, _LDAAsicData);
 				} else {
 					cout << "ScReader: header invalid. Received" << to_hex(dataPart[0]) << " " << to_hex(dataPart[1]) << " " << to_hex(dataPart[2]) << " "
@@ -460,26 +467,34 @@ namespace eudaq {
 	}
 
 	void ScReader::buildEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
-//      std::cout << "DEBUG: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
+      std::cout << "DEBUG: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
 		if (_producer->getDebugKeepBuffered()) return;
+
 		std::lock_guard<std::mutex> lock(_eventBuildingQueueMutex); //minimal lock for pushing new event
 		switch (_producer->getEventMode()) {
 		case AHCALProducer::EventBuildingMode::ROC:
+      			std::cout << "EvtBuilding::ROC"<<std::endl;
 			buildROCEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::TRIGGERID:
+      			std::cout << "EvtBuilding::TRIGGERID"<<std::endl;
 			buildTRIGIDEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::BUILD_BXID_ALL:
+      			std::cout << "EvtBuilding::BUILD_BXID_ALL"<<std::endl;
 			buildBXIDEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::BUILD_BXID_VALIDATED:
+      			std::cout << "EvtBuilding::BUILD_BXID_VALIDATED"<<std::endl;
 			buildValidatedBXIDEvents(EventQueue, dumpAll);
 			break;
 		default:
 			break;
 		}
 		//append temperature etc.
+
+      std::cout << "DEBUG/end: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
+		
 	}
 
 	void ScReader::appendOtherInfo(eudaq::RawEvent *ev) {
@@ -531,7 +546,7 @@ namespace eudaq {
 		ev->AddBlock(6, vector<uint32_t>()); // dummy block to be filled later with cycledata(start, stop, trigger)
 		ev->AddBlock(7, std::vector<std::pair<int, int>>()); //to be filled with info on stopping bxid per Asic
 		ev->AddBlock(8, vector<int>()); //HV adjustment info
-		ev->AddBlock(9, vector<int>()); //reserved for any future use
+		ev->AddBlock(9, vector<char>()); //reserved for any future use
 		appendOtherInfo(ev);
 	}
 
@@ -1024,56 +1039,163 @@ namespace eudaq {
 	void ScReader::buildROCEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
 		int keptEventCount = dumpAll ? 0 : _producer->getKeepBuffered(); //how many ROCs to keep in the data maps
 //      keptEventCount = 100000;
-		while (_LDAAsicData.size() > keptEventCount) { //at least 2 finished ROC
+		printf("ScReader::buildROCEvents(): %d in SPIROC buffer, %d in KLauS buffer\n",_LDAAsicData.size(),_LDAKLAUSAsicData.size());
+		int thisROC;
+		while ((_LDAAsicData.size() > keptEventCount) || (_LDAKLAUSAsicData.size() > keptEventCount )) {
+			int rocs[2];
+			rocs[1]=rocs[0]=-1;
+			bool add[2]={false,false};
 
-			while (_producer->getInsertDummyPackets() && (++_lastBuiltEventNr < _LDAAsicData.begin()->first))
+			if(!_LDAAsicData.empty())
+				rocs[0] = _LDAAsicData.begin()->first;
+			if(!_LDAKLAUSAsicData.empty())
+				rocs[1] = _LDAKLAUSAsicData.begin()->first;
+			//printf("rocs: %d, %d\n",rocs[0],rocs[1]);
+
+			//Find pairs of ASIC packets (Spiroc/KLauS) based on ROC
+			if(rocs[0]==rocs[1]){
+				printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
+				add[0]=true;
+				add[1]=true;
+				thisROC=rocs[0];
+				//_LDAAsicData.erase(_LDAAsicData.begin());
+				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
+
+			}else if( (rocs[1]==-1) || (rocs[0]<rocs[1])&&(rocs[0]>=0)){
+				printf("%4.4d\n",rocs[0]);
+				add[0]=true;
+				thisROC=rocs[0];
+				//_LDAAsicData.erase(_LDAAsicData.begin());
+
+			}else if( (rocs[0]==-1) || (rocs[1]<rocs[0])&&(rocs[1]>=0)){
+				printf("     %4.4d\n",rocs[1]);
+				add[1]=true;
+				thisROC=rocs[1];
+				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
+			}
+
+			//if needed, insert dummy events filling the gaps
+			while (_producer->getInsertDummyPackets() && (++_lastBuiltEventNr < thisROC)){
+				cout<<"ScReader::buildROCEvents(): Adding dummy Event "<<_lastBuiltEventNr<<endl;
 				insertDummyEvent(EventQueue, _lastBuiltEventNr, -1, false);
-			int roc = _LDAAsicData.begin()->first; //_LDAAsicData.begin()->first;
+			}
+
+			//prepare new event
+			eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
+			eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
+			prepareEudaqRawPacket(nev_raw);
+			nev->SetTag("ROC", thisROC);
+			//nev->SetEventN(roc);
+
+
+			//insert Spiroc data
+			if(add[0]){
+				std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
+				for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
+					if (idata->size()) {
+						nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
+					}
+				}
+				_LDAAsicData.erase(_LDAAsicData.begin());
+			}//-insert Spiroc data
+
+			//insert KLauS data
+			if(add[1]){
+				std::vector<KLauS_Hit> &data = _LDAKLAUSAsicData.begin()->second;
+				for(auto hit: data){
+					//auto ptr=data.SerializeHit();
+					//nev_raw->AppendBlock(9,ptr,1)
+				}
+				_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
+			}//insert KLauS data
+
+
+			//insert timestamp data
+			if (!_producer->getIgnoreLdaTimestamps()) {
+				if (_LDATimestampData.count(thisROC)){
+					nev->SetTag("ROCStartTS", _LDATimestampData[thisROC].TS_Start);
+					if (_LDATimestampData[thisROC].TS_Start && _LDATimestampData[thisROC].TS_Stop) {
+						//save timestamp only if both timestamps are present. Otherwise there was something wrong in the data
+						nev->SetTimestamp(_LDATimestampData[thisROC].TS_Start, _LDATimestampData[thisROC].TS_Stop, true);
+					} else {
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
+						std::cout << "ERROR EB: one of the timestamp is incorrect in ROC " << thisROC << ". Start=" << _LDATimestampData[thisROC].TS_Start << " STOP="
+								<< _LDATimestampData[thisROC].TS_Stop << std::endl;
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+					}
+					if (_LDATimestampData[thisROC].TS_Stop - _LDATimestampData[thisROC].TS_Start > 100 * C_MILLISECOND_TICS) {
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
+						std::cout << "ERROR EB: Length of the acquisition is longer than 100 ms in ROC " << thisROC << std::endl;
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+					}
+					std::vector<uint32_t> cycledata;
+					cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Start));
+					cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Start >> 32));
+					cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Stop));
+					cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Stop >> 32));
+					if (_LDATimestampData[thisROC].TS_Triggers.size()) {
+						cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Triggers.back()));
+						cycledata.push_back((uint32_t) (_LDATimestampData[thisROC].TS_Triggers.back() >> 32));
+					} else {
+						cycledata.push_back((uint32_t) 0);
+						cycledata.push_back((uint32_t) 0);
+					}
+					nev_raw->AppendBlock(6, cycledata);
+					_LDATimestampData.erase(thisROC);
+				} else {
+					if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
+					std::cout << "ERROR EB: matching LDA timestamp information not found for ROC " << thisROC << std::endl;
+					if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+				}
+			}else{
+				_LDATimestampData.clear();
+			}//-insert timestamp data
+			
+		}//while(): asic data consumer
+
+		/*
+
+		while (_LDAAsicData.size() > keptEventCount) { //at least 2 finished ROC
+			int roc = _LDAAsicData.begin()->first;
 			std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
 			eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
 			eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
 			prepareEudaqRawPacket(nev_raw);
 			nev->SetTag("ROC", roc);
 
-//         nev->SetEventN(roc);
-			for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
-				if (idata->size()) {
-					nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
-				}
-			}
 //nev->Print(std::cout, 0);
-			if (_LDATimestampData.count(roc) && (!_producer->getIgnoreLdaTimestamps())) {
-				nev->SetTag("ROCStartTS", _LDATimestampData[roc].TS_Start);
-				if (_LDATimestampData[roc].TS_Start && _LDATimestampData[roc].TS_Stop) {
-					//save timestamp only if both timestamps are present. Otherwise there was something wrong in the data
-					nev->SetTimestamp(_LDATimestampData[roc].TS_Start, _LDATimestampData[roc].TS_Stop, true);
+			if (!_producer->getIgnoreLdaTimestamps()) {
+				if (_LDATimestampData.count(roc)){
+					nev->SetTag("ROCStartTS", _LDATimestampData[roc].TS_Start);
+					if (_LDATimestampData[roc].TS_Start && _LDATimestampData[roc].TS_Stop) {
+						//save timestamp only if both timestamps are present. Otherwise there was something wrong in the data
+						nev->SetTimestamp(_LDATimestampData[roc].TS_Start, _LDATimestampData[roc].TS_Stop, true);
+					} else {
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
+						std::cout << "ERROR EB: one of the timestamp is incorrect in ROC " << roc << ". Start=" << _LDATimestampData[roc].TS_Start << " STOP="
+								<< _LDATimestampData[roc].TS_Stop << std::endl;
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+					}
+					if (_LDATimestampData[roc].TS_Stop - _LDATimestampData[roc].TS_Start > 100 * C_MILLISECOND_TICS) {
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
+						std::cout << "ERROR EB: Length of the acquisition is longer than 100 ms in ROC " << roc << std::endl;
+						if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+					}
+					std::vector<uint32_t> cycledata;
+					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start));
+					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start >> 32));
+					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop));
+					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop >> 32));
+					if (_LDATimestampData[roc].TS_Triggers.size()) {
+						cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back()));
+						cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back() >> 32));
+					} else {
+						cycledata.push_back((uint32_t) 0);
+						cycledata.push_back((uint32_t) 0);
+					}
+					nev_raw->AppendBlock(6, cycledata);
+					_LDATimestampData.erase(roc);
 				} else {
-					if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
-					std::cout << "ERROR EB: one of the timestamp is incorrect in ROC " << roc << ". Start=" << _LDATimestampData[roc].TS_Start << " STOP="
-							<< _LDATimestampData[roc].TS_Stop << std::endl;
-					if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
-				}
-				if (_LDATimestampData[roc].TS_Stop - _LDATimestampData[roc].TS_Start > 100 * C_MILLISECOND_TICS) {
-					if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
-					std::cout << "ERROR EB: Length of the acquisition is longer than 100 ms in ROC " << roc << std::endl;
-					if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
-				}
-				std::vector<uint32_t> cycledata;
-				cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start));
-				cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start >> 32));
-				cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop));
-				cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop >> 32));
-				if (_LDATimestampData[roc].TS_Triggers.size()) {
-					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back()));
-					cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back() >> 32));
-				} else {
-					cycledata.push_back((uint32_t) 0);
-					cycledata.push_back((uint32_t) 0);
-				}
-				nev_raw->AppendBlock(6, cycledata);
-				_LDATimestampData.erase(roc);
-			} else {
-				if (!_producer->getIgnoreLdaTimestamps()) {
 					if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
 					std::cout << "ERROR EB: matching LDA timestamp information not found for ROC " << roc << std::endl;
 					if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
@@ -1083,6 +1205,7 @@ namespace eudaq {
 			EventQueue.push_back(std::move(nev));
 			_LDAAsicData.erase(_LDAAsicData.begin());
 		}
+		*/
 	}
 
 	void ScReader::buildTRIGIDEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
@@ -1212,61 +1335,30 @@ namespace eudaq {
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}
 
-	void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
-		//structure of the AHCALData
-		// it is a map, which maps a vector (a list) of ASIC data frames corresponding to a single bxid (single memory cell) to a readoutcycle number
-		// the nested vector<int> cosists of:
-		//   0 - readout cycle number
-		//   1 - bxid
-		//   2 - memory cell
-		//   3 - chipid
-		//   4 - number of channels (NChannel)				number of hits
-		//   								Channel[nHits]
-		//   								Gainbit[nHits]
-		//   5..NChannel+5 - TDC					TDC [nHits]
-		//   Nchannels+6..2*NChannels+6 - ADC				ADC [nHits]
-
-		//for ahcal SPIROC packet: the packet is sliced into individual memory cells (same bxid)
-
-		//accessible variables:
-		//length - length of the processed packet
-		std::cout << "DEBUG length of the KLAUS packet is " << length << std::endl;
-
-		std::cout << "DEBUG LDA header: ";
-		for (int i = 0; i < e_sizeLdaHeader; i++) {
-			std::cout << to_hex(buf[i], 2) << " ";
-		}
-		std::cout << std::endl;
-		std::cout << "DEBUG KLAUS packet: ";
-		for (int i = e_sizeLdaHeader; i < length + e_sizeLdaHeader; i++) {
-			std::cout << to_hex(buf[i], 2) << " ";
-		}
-		std::cout << std::endl;
-
+void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
 		LDA_PKT pkt(buf,length+e_sizeLdaHeader);
-		pkt.PrintLDAHDR();
-		pkt.PrintRoPKTHDR();
+//		pkt.PrintLDAHDR();
+//		pkt.PrintRoPKTHDR();
 //		unsigned int LDA_Header_port = buf[7];                     //Port number from LDA header
-//
 //Get ROC number from packet
-/*
-		auto old_cycleNo = _cycleNo;
-		_cycleNo = updateCntModulo(_cycleNo, pkt.HDR_ROC(), 8, _producer->getMaxRocJump());                 //update the 32 bit counter with 8bit counter
-		int8_t cycle_difference = _cycleNo - old_cycleNo;                     //LDA_Header_cycle - (old_cycleNo & 0xFF);
+		auto old_cycleNo = _cycleNoK;
+		unsigned int LDA_Header_cycle = (unsigned char)	pkt.HDR_ROC();
+		_cycleNoK = updateCntModulo(_cycleNoK, LDA_Header_cycle, 8, _producer->getMaxRocJump());                 //update the 32 bit counter with 8bit counter
+		cout<<"KLauS: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNoK<<" update "<<LDA_Header_cycle<<endl;
+		int8_t cycle_difference = _cycleNoK - old_cycleNo;                     //LDA_Header_cycle - (old_cycleNo & 0xFF);
 		if (cycle_difference < (0 - _producer->getMaxRocJump())) {      //received a data from previous ROC. should not happen
-			cout << "Received data from much older ROC in run " << _runNo << ". Global ROC=" << _cycleNo << " (" << _cycleNo % 256 << " modulo 256), received="
+			cout << "Received data from much older ROC in run " << _runNo << ". Global ROC=" << _cycleNoK << " (" << _cycleNoK % 256 << " modulo 256), received="
 					<< pkt.HDR_ROC() << endl;
 			EUDAQ_EXTRA(
-					"Received data from much older ROC in run " + to_string(_runNo) + ". Global ROC=" + to_string(_cycleNo) + " (" + to_string(_cycleNo % 256)
+					"Received data from much older ROC in run " + to_string(_runNo) + ". Global ROC=" + to_string(_cycleNoK) + " (" + to_string(_cycleNoK % 256)
 							+ " modulo 256), received=" + to_string(pkt.HDR_ROC()));
 		}
 		if (cycle_difference > _producer->getMaxRocJump()) {
-			_cycleNo = old_cycleNo;
-			cout << "ERROR: Jump in run " << _runNo << " in data readoutcycle by " << to_string((int) cycle_difference) << "in ROC " << _cycleNo << endl;
-			EUDAQ_ERROR("Jump in run " + to_string(_runNo) + "in data readoutcycle by " + to_string((int )cycle_difference) + "in ROC " + to_string(_cycleNo));
-//         if (cycle_difference < 20) _cycleNo += cycle_difference; //we compensate only small difference
+			_cycleNoK = old_cycleNo;
+			cout << "ERROR: Jump in run " << _runNo << " in data readoutcycle by " << to_string((int) cycle_difference) << "in ROC " << _cycleNoK << endl;
+			EUDAQ_ERROR("Jump in run " + to_string(_runNo) + "in data readoutcycle by " + to_string((int )cycle_difference) + "in ROC " + to_string(_cycleNoK));
+//         if (cycle_difference < 20) _cycleNoK += cycle_difference; //we compensate only small difference
 		}
-*/
 
 
 // footer check: ABAB
@@ -1281,22 +1373,20 @@ namespace eudaq {
 							+ to_string((unsigned int )(unsigned char )buffer_it[length - 1]));
 		}
 //Get&Fill hit data from the readoutcycle.
-		auto &readoutCycle = AHCALData.insert( { _cycleNo, std::vector<KLauS_Hit>() }).first->second;
+		auto &readoutCycle = AHCALData.insert( { _cycleNoK, std::vector<KLauS_Hit>() }).first->second;
 
 //Parse hit data payload
 		if(pkt.IsK5HitData() && pkt.PayloadLen8()%6 == 0){
 			pkt.Reorder();
-			printf("Parsing hit data payload\n");
 			auto ptr=pkt.PayloadStart();
-			KLauS_Hit::PrintHeader();
+			//KLauS_Hit::PrintHeader();
 			while(ptr < pkt.PayloadEnd())
 			{
 				if(ptr[0]!=0xfe){//non-empty hit?
 					//KLauS_Hit hit(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
 					readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
-					readoutCycle.back().Print();
+					//readoutCycle.back().Print();
 				}else{//empty hits are not saved
-					printf("-- Empty\n");
 				}
 				ptr+=6;
 			}
@@ -1304,50 +1394,11 @@ namespace eudaq {
 			std::cout << "DEBUG NON-KLAUS5 Packet or data length mismatch"<<std::endl;
 		}
 
-
-
-		/*
-		//data can be accessed like this:
-		int cycleNo = _cycleNo; //you can adjust the cycle number
-		std::vector<std::vector<int> > &readoutCycle = AHCALData.insert( { _cycleNo, std::vector<std::vector<int> >() }).first->second;
-		vector<int> memCellData;
-		memCellData.push_back((int) cycleNo);
-
-		int bxid = 0; //to be filled
-		memCellData.push_back(bxid);
-
-		int memCell = 0; //to be filled
-		memCellData.push_back(memCell);
-
-		int chipId = 0; //to be filled
-		memCellData.push_back(chipId);
-
-		int NChannel = 36; //to be filled, bu probably constant
-		memCellData.push_back(NChannel);
-
-		vector<unsigned short> adc, tdc; //to be filled with 36 values each
-		for (int n = 0; n < NChannel; n++) { //some dummy values
-			adc.push_back(n);
-			tdc.push_back(n);
-		}
-
-		for (int n = 0; n < NChannel; n++)
-			//fill the TDC values
-			memCellData.push_back(tdc[NChannel - n - 1]);
-
-		for (int n = 0; n < NChannel; n++)
-			//fill the ADC values
-			memCellData.push_back(adc[NChannel - n - 1]);
-
-		readoutCycle.push_back(std::move(memCellData)); //add the memory cell (bxid) data slice to the array of slices in the same readoutcycle
-
-		*/
 		//finally, the data from the packet can be discarded
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}
 
-	void ScReader::readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData) {
-//AHCALData[_cycleNo];
+void ScReader::readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData) {
 		unsigned int LDA_Header_cycle = (unsigned char) buf[4];                     //from LDA packet header - 8 bits only!
 		unsigned int LDA_Header_port = buf[7];                     //Port number from LDA header
 		auto old_cycleNo = _cycleNo;
@@ -1360,6 +1411,8 @@ namespace eudaq {
 					"Received data from much older ROC in run " + to_string(_runNo) + ". Global ROC=" + to_string(_cycleNo) + " (" + to_string(_cycleNo % 256)
 							+ " modulo 256), received=" + to_string(LDA_Header_cycle));
 		}
+		
+		cout<<"SPIROC: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNo<<" update "<<LDA_Header_cycle<<endl;
 		if (cycle_difference > _producer->getMaxRocJump()) {
 			_cycleNo = old_cycleNo;
 			cout << "ERROR: Jump in run " << _runNo << " in data readoutcycle by " << to_string((int) cycle_difference) << "in ROC " << _cycleNo << endl;
@@ -1659,42 +1712,22 @@ namespace eudaq {
 	}
 
 	void ScReader::printLDAROCInfo(std::ostream &out) {
-//      out << "============================================================" << std::endl;
-//      for (int roc = 0; roc < _cycleNo + 1; ++roc) {
-//         if (!(_LDAAsicData.count(roc))) {
-//            std::cout << "No ASIC MAP entry for ROC: " << roc << std::endl;
-//         } else {
-//            if (_LDAAsicData[roc].size() < 1) {
-//               out << "WARNING: ROC " << roc << "\tSize:" << _LDAAsicData[roc].size() << std::endl;
-//            }
-//         }
-//      }
-//      out << "============================================================" << std::endl;
-//      for (int roc = 0; roc < _cycleNo + 1; ++roc) {
-//         if (!(_LDATimestampData.count(roc))) {
-//            std::cout << "No TS MAP entry for ROC: " << roc << std::endl;
-//         } else {
-//            if (_LDATimestampData[roc].TS_Start == 0) {
-//               out << "WARNING: ROC " << roc << " has zero TS_Start" << std::endl;
-//            }
-//            if (_LDATimestampData[roc].TS_Stop == 0) {
-//               out << "WARNING: ROC " << roc << " has zero TS_Stop" << std::endl;
-//            }
-////            if (_LDATimestampData[roc].TriggerIDs.size() < 1) {
-////               out << "WARNING: ROC " << roc << "\tSize:" << _LDAAsicData[roc].size() << std::endl;
-////            }
-//         }
-//      }
 		if (_producer->getColoredTerminalMessages()) out << "\033[32m";
 		out << "============================================================" << std::endl;
-		out << "Last processed Cycle: " << _cycleNo << " (counts from 0)" << std::endl;
+		out << "Last processed Cycle(S): " << _cycleNo << " (counts from 0)" << std::endl;
+		out << "Last processed Cycle(K): " << _cycleNoK << " (counts from 0)" << std::endl;
 		out << "Last processed TriggerID: " << _trigID << " (counts from " << _producer->getLdaTrigidStartsFrom() << "?)" << std::endl;
 		out << "Last built event #: " << _lastBuiltEventNr << std::endl;
 		out << "============================================================" << std::endl;
-		out << "#Left in ASIC buffers:" << std::endl;
+		out << "#Left in ASIC buffers (SPIROC):" << std::endl;
 		for (auto &it : _LDAAsicData) {
 			out << "ROC " << it.first << "\tsize " << it.second.size() << std::endl;
 		}
+		out << "#Left in ASIC buffers (KLAUS):" << std::endl;
+		for (auto &it : _LDAKLAUSAsicData) {
+			out << "ROC " << it.first << "\tsize " << it.second.size() << std::endl;
+		}
+/*
 		out << "#Left in Timestamp buffers:" << std::endl;
 		for (auto &it : _LDATimestampData) {
 			out << "ROC " << it.first << "\traw_trigIDs:";
@@ -1712,6 +1745,7 @@ namespace eudaq {
 				out << "WARNING: ROC " << it.first << " has zero TS_Stop" << std::endl;
 			}
 		}
+*/
 		out << "============================================================";
 		if (_producer->getColoredTerminalMessages()) out << "\033[0m";
 		out << std::endl;
