@@ -4,6 +4,7 @@ aux_source_directory(src MODULE_SRC)
 
 if(NOT EUDAQ_LCIO_LIBRARY)
   list(REMOVE_ITEM MODULE_SRC src/AHCalRawEvent2LCEventConverter.cc)
+  list(REMOVE_ITEM MODULE_SRC src/AhcalLCFileWriter.cc)
 endif()
 
 if(NOT EUDAQ_TTREE_LIBRARY)
