@@ -36,7 +36,7 @@ namespace eudaq {
 		_trigidNotKnown = true;
 //      _tempmode = false;
 		cycleData.resize(6);
-		_LDAAsicData.clear(); //erase(_LDAAsicData.begin(), _LDAAsicData.end()); //clear();
+		_LDAAsicData.clear();
 		_LDAKLAUSAsicData.clear();
 		_LDATimestampData.clear();
 		_RunTimesStatistics.clear();
@@ -546,7 +546,7 @@ namespace eudaq {
 		ev->AddBlock(6, vector<uint32_t>()); // dummy block to be filled later with cycledata(start, stop, trigger)
 		ev->AddBlock(7, std::vector<std::pair<int, int>>()); //to be filled with info on stopping bxid per Asic
 		ev->AddBlock(8, vector<int>()); //HV adjustment info
-		ev->AddBlock(9, vector<char>()); //reserved for any future use
+		ev->AddBlock(9, vector<int>()); //reserved for any future use
 		appendOtherInfo(ev);
 	}
 
@@ -1101,10 +1101,11 @@ namespace eudaq {
 
 			//insert KLauS data
 			if(add[1]){
-				std::vector<KLauS_Hit> &data = _LDAKLAUSAsicData.begin()->second;
-				for(auto hit: data){
-					//auto ptr=data.SerializeHit();
-					//nev_raw->AppendBlock(9,ptr,1)
+				std::vector<std::vector<int> > &data = _LDAKLAUSAsicData.begin()->second;
+				for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
+					if (idata->size()) {
+						nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
+					}
 				}
 				_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
 			}//insert KLauS data
@@ -1335,7 +1336,8 @@ namespace eudaq {
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}
 
-void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
+//void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
+void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData) {
 		LDA_PKT pkt(buf,length+e_sizeLdaHeader);
 //		pkt.PrintLDAHDR();
 //		pkt.PrintRoPKTHDR();
@@ -1373,7 +1375,8 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 							+ to_string((unsigned int )(unsigned char )buffer_it[length - 1]));
 		}
 //Get&Fill hit data from the readoutcycle.
-		auto &readoutCycle = AHCALData.insert( { _cycleNoK, std::vector<KLauS_Hit>() }).first->second;
+		//auto &readoutCycle = AHCALData.insert( { _cycleNoK, std::vector<KLauS_Hit>() }).first->second;
+		auto &readoutCycle = AHCALData.insert( { _cycleNoK, std::vector<std::vector<int> >()}).first->second;
 
 //Parse hit data payload
 		if(pkt.IsK5HitData() && pkt.PayloadLen8()%6 == 0){
@@ -1383,9 +1386,20 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 			while(ptr < pkt.PayloadEnd())
 			{
 				if(ptr[0]!=0xfe){//non-empty hit?
-					//KLauS_Hit hit(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
-					readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
+					//TODO add LDA number and port number in the higher bytes of the int
+					KLauS_Hit hit(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
+					//readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
 					//readoutCycle.back().Print();
+					vector<int> infodata;
+					infodata.push_back((int) _cycleNoK);
+					infodata.push_back(-1); //bxid is -1 for KLauS hits
+					infodata.push_back(hit.GetASICChannel()); //memCell is used as channel number for KLauS hits
+					infodata.push_back(hit.GetASICNumber());
+					infodata.push_back(1);//number of channels is always 1 for KLauS hits
+					infodata.push_back(hit.GetTime());
+					infodata.push_back(hit.GetADC_10b());
+					//append hit as single block to event data
+					readoutCycle.push_back(std::move(infodata));
 				}else{//empty hits are not saved
 				}
 				ptr+=6;
