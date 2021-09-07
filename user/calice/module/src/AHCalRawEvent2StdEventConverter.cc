@@ -23,7 +23,7 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
       int getXcoordFromChipChannel(int chipid, int channelNr) const;
       int getYcoordFromChipChannel(int chipid, int channelNr) const;
       const std::map<int, int> layerOrder = { //{module,layer}
-         { 1, 0 }, { 2, 1 }, { 3, 2 }
+         { 42, 0 }, { 43, 1 }
 	 //         { 4, 3 }, { 5, 4 }
       };
 
@@ -33,30 +33,9 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
                               { 1, std::make_tuple(6, 0) },
                               { 2, std::make_tuple(0, 6) },
                               { 3, std::make_tuple(0, 0) }
-            //                  { 185, std::make_tuple(0, 18, 18) },
-            //                  { 186, std::make_tuple(0, 18, 12) },
-            //                  { 187, std::make_tuple(0, 12, 18) },
-            //                   { 188, std::make_tuple(0, 12, 12) },
-            //layer 10: former layer 12 - full HBU
             //shell script for big layer:
             //chip0=129 ; layer=1 ; for i in `seq 0 15` ; do echo "{"`expr ${i} + ${chip0}`", std::make_tuple("${layer}", "`expr 18 - \( ${i} / 8 \) \* 12 - \( ${i} / 2 \) \% 2 \* 6`", "`expr 18 - \( ${i} \% 8 \) / 4 \* 12 - ${i} \% 2 \* 6`") }," ; done
 
-//                  { 0, std::make_tuple(18, 18) },
-//                  { 1, std::make_tuple(18, 12) },
-//                  { 2, std::make_tuple(12, 18) },
-//                  { 3, std::make_tuple(12, 12) },
-//                  { 4, std::make_tuple(18, 6) },
-//                  { 5, std::make_tuple(18, 0) },
-//                  { 6, std::make_tuple(12, 6) },
-//                  { 7, std::make_tuple(12, 0) },
-//                  { 8, std::make_tuple(6, 18) },
-//                  { 9, std::make_tuple(6, 12) },
-//                  { 10, std::make_tuple(0, 18) },
-//                  { 11, std::make_tuple(0, 12) },
-//                  { 12, std::make_tuple(6, 6) },
-//                  { 13, std::make_tuple(6, 0) },
-//                  { 14, std::make_tuple(0, 6) },
-//                  { 15, std::make_tuple(0, 0) }
             };
 //      const int planeCount = 2;
 //      const int pedestalLimit = 400;
@@ -71,10 +50,6 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
    std::string sensortype = "AHCAL Layer"; //TODO ?? "HBU"
    auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
    size_t nblocks = ev->NumBlocks();
-//   if (nblocks < 7 + eventSizeLimit) {
-//      std::cout << ev->GetEventNumber() << "<too small(" << nblocks - 7 << ")>" << std::endl;
-//      return false;
-//   }
    std::vector<std::unique_ptr<eudaq::StandardPlane>> planes;
    std::vector<int> HBUHits;
    std::vector<std::array<int, planesXsize * planesYsize>> HBUs;         //HBU(aka plane) index, x*12+y
@@ -84,6 +59,7 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       HBUs.push_back(HBU); //add the HBU to the HBU
       HBUHits.push_back(0);
    }
+
    unsigned int nblock = 10; // the first 10 blocks contain other information
    std::cout << ev->GetEventNumber() << "<" << std::flush;
 
@@ -93,6 +69,14 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       data.resize(bl.size() / sizeof(int));
       memcpy(&data[0], &bl[0], bl.size());
       if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
+      std::cout << "Block "<<nblock-1<<" has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
+      std::cout << "cycleNr="<<data[0];
+      std::cout << "  bxid="<<data[1];
+      std::cout << "  memcell="<<data[2];
+      std::cout << "  chipID="<<data[3];
+      std::cout << "  Nchannels="<<data[4]<<std::endl;
+
+
       //data structure of packet: data[i]=
       //i=0 --> cycleNr
       //i=1 --> bunch crossing id
