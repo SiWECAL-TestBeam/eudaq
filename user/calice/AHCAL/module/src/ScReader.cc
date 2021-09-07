@@ -1152,6 +1152,7 @@ namespace eudaq {
 				_LDATimestampData.clear();
 			}//-insert timestamp data
 			
+			EventQueue.push_back(std::move(nev));
 		}//while(): asic data consumer
 
 		/*
