@@ -1440,13 +1440,15 @@ namespace eudaq {
                   //we do accept small jumps forward
                   _trigID += trigIDdifference;
                   _RunTimesStatistics.triggers_lost += trigIDdifference - 1;
-                  if (_producer->getColoredTerminalMessages()) std::cout << "\033[35;1m";
-                  cout << "WARNING: " << (trigIDdifference - 1) << " Skipped TriggerIDs detected in run " << _runNo << ". Incrementing counter. ROC="
-                        << _cycleNoTS << ", TrigID=" << _trigID << endl;
-                  if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
-                  EUDAQ_WARN(
-                        to_string(trigIDdifference - 1) + "Skipped TriggerID detected in run " + to_string(_runNo) + ". Incrementing counter. ROC="
-                              + to_string(_cycleNoTS) + ", TrigID=" + to_string(_trigID));
+		  if (trigIDdifference > 2){ //reduce the number of triggers
+		    if (_producer->getColoredTerminalMessages()) std::cout << "\033[35;1m";
+		    cout << "WARNING: " << (trigIDdifference - 1) << " Skipped TriggerIDs detected in run " << _runNo << ". Incrementing counter. ROC="
+			 << _cycleNoTS << ", TrigID=" << _trigID << endl;
+		    if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+		    EUDAQ_WARN(
+			       to_string(trigIDdifference - 1) + "Skipped TriggerID detected in run " + to_string(_runNo) + ". Incrementing counter. ROC="
+			       + to_string(_cycleNoTS) + ", TrigID=" + to_string(_trigID));
+		  }
                }
 
                //TODO fix the case, when the trigger comes as the very first event. Not the case for TLU - it starts sending triggers later
