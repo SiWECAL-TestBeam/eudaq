@@ -9,7 +9,7 @@
 #define planesXsize 12
 #define planesYsize 12
 
-#define planeCount 3
+#define planeCount 4
 #define pedestalLimit 0 //minimum adc value, that will be displayed
 #define eventSizeLimit 1 //minimum size of the event which will be displayed
 
@@ -23,7 +23,7 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
       int getXcoordFromChipChannel(int chipid, int channelNr) const;
       int getYcoordFromChipChannel(int chipid, int channelNr) const;
       const std::map<int, int> layerOrder = { //{module,layer}
-         { 1, 0 }, { 2, 1 }, { 3, 2 }
+	{ 1, 0 }, { 2, 1 }, { 3, 2 }, {4,3}
 	 //         { 4, 3 }, { 5, 4 }
       };
 
