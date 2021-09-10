@@ -74,7 +74,7 @@ int main(int /*argc*/, const char **argv) {
       in_range_tsn = true;
 
 
-    if((in_range_evn && in_range_tgn && in_range_tsn) && not_all_zero){
+    if((in_range_evn && in_range_tgn && in_range_tsn) || not not_all_zero){
       ev->Print(std::cout);
       if(stdev_v){
         auto evstd = eudaq::StandardEvent::MakeShared();
