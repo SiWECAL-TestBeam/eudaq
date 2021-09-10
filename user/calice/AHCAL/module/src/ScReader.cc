@@ -467,25 +467,21 @@ namespace eudaq {
 	}
 
 	void ScReader::buildEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
-      std::cout << "DEBUG: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
+//      std::cout << "DEBUG: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
 		if (_producer->getDebugKeepBuffered()) return;
 
 		std::lock_guard<std::mutex> lock(_eventBuildingQueueMutex); //minimal lock for pushing new event
 		switch (_producer->getEventMode()) {
 		case AHCALProducer::EventBuildingMode::ROC:
-      			std::cout << "EvtBuilding::ROC"<<std::endl;
 			buildROCEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::TRIGGERID:
-      			std::cout << "EvtBuilding::TRIGGERID"<<std::endl;
 			buildTRIGIDEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::BUILD_BXID_ALL:
-      			std::cout << "EvtBuilding::BUILD_BXID_ALL"<<std::endl;
 			buildBXIDEvents(EventQueue, dumpAll);
 			break;
 		case AHCALProducer::EventBuildingMode::BUILD_BXID_VALIDATED:
-      			std::cout << "EvtBuilding::BUILD_BXID_VALIDATED"<<std::endl;
 			buildValidatedBXIDEvents(EventQueue, dumpAll);
 			break;
 		default:
@@ -1347,7 +1343,7 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 		auto old_cycleNo = _cycleNoK;
 		unsigned int LDA_Header_cycle = (unsigned char)	pkt.HDR_ROC();
 		_cycleNoK = updateCntModulo(_cycleNoK, LDA_Header_cycle, 8, _producer->getMaxRocJump());                 //update the 32 bit counter with 8bit counter
-		cout<<"KLauS: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNoK<<" update "<<LDA_Header_cycle<<endl;
+		//cout<<"KLauS: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNoK<<" update "<<LDA_Header_cycle<<endl;
 		int8_t cycle_difference = _cycleNoK - old_cycleNo;                     //LDA_Header_cycle - (old_cycleNo & 0xFF);
 		if (cycle_difference < (0 - _producer->getMaxRocJump())) {      //received a data from previous ROC. should not happen
 			cout << "Received data from much older ROC in run " << _runNo << ". Global ROC=" << _cycleNoK << " (" << _cycleNoK % 256 << " modulo 256), received="
@@ -1387,18 +1383,21 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 			while(ptr < pkt.PayloadEnd())
 			{
 				if(ptr[0]!=0xfe){//non-empty hit?
-					//TODO add LDA number and port number in the higher bytes of the int
-					KLauS_Hit hit(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
+					unsigned chipid_global=((pkt.HDR_PORT()+42)<<8) + pkt.PKT_asic();
+					//Add LDA number and port number in the higher bytes of the int
+					KLauS_Hit hit(ptr,pkt.HDR_ROC(), pkt.PKT_asic());
 					//readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
-					//readoutCycle.back().Print();
+					//hit.Print();
+					//printf("ASIC-ID = %u\n",chipid_global);
 					vector<int> infodata;
 					infodata.push_back((int) _cycleNoK);
 					infodata.push_back(-1); //bxid is -1 for KLauS hits
 					infodata.push_back(hit.GetASICChannel()); //memCell is used as channel number for KLauS hits
-					infodata.push_back(hit.GetASICNumber());
+					infodata.push_back(chipid_global);
 					infodata.push_back(1);//number of channels is always 1 for KLauS hits
 					infodata.push_back(hit.GetTime());
-					infodata.push_back(hit.GetADC_10b());
+	 				//add gain bit and fake hit-bit information to ADC information
+					infodata.push_back(hit.GetADC_10b() + 0x2000*hit.GetGainBit() + 0x1000);
 					//append hit as single block to event data
 					readoutCycle.push_back(std::move(infodata));
 				}else{//empty hits are not saved
@@ -1427,7 +1426,7 @@ void ScReader::readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::
 							+ " modulo 256), received=" + to_string(LDA_Header_cycle));
 		}
 		
-		cout<<"SPIROC: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNo<<" update "<<LDA_Header_cycle<<endl;
+		//cout<<"SPIROC: Old cycle: "<<old_cycleNo <<" new cycleNo "<<_cycleNo<<" update "<<LDA_Header_cycle<<endl;
 		if (cycle_difference > _producer->getMaxRocJump()) {
 			_cycleNo = old_cycleNo;
 			cout << "ERROR: Jump in run " << _runNo << " in data readoutcycle by " << to_string((int) cycle_difference) << "in ROC " << _cycleNo << endl;
