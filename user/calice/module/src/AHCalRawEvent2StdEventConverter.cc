@@ -9,7 +9,7 @@
 #define planesXsize 12
 #define planesYsize 12
 
-#define planeCount 3
+#define planeCount 2
 #define pedestalLimit 0 //minimum adc value, that will be displayed
 #define eventSizeLimit 1 //minimum size of the event which will be displayed
 
@@ -63,7 +63,7 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
    unsigned int nblock = 10; // the first 10 blocks contain other information
    std::cout << ev->GetEventNumber() << "<" << std::flush;
 
-   while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
+   while ((nblock < ev->NumBlocks())&&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
       std::vector<int> data;
       const auto & bl = ev->GetBlock(nblock++);
       data.resize(bl.size() / sizeof(int));
@@ -87,34 +87,39 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       //i=NC+5 to NC+NC+4  -->  14 bits that contains ADC and again a copy of the hit/gainbit
       //debug prints:
       //std:cout << "Data_" << data[0] << "_" << data[1] << "_" << data[2] << "_" << data[3] << "_" << data[4] << "_" << data[5] << std::endl;
-      if (data[1] == 0) continue; //don't store dummy trigger
       int chipid = data[3];
       int planeNumber = getPlaneNumberFromCHIPID(chipid);
-      //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
+      if (data[1] == 0) continue; //don't store dummy trigger
+      printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
 
       for (int ichan = 0; ichan < data[4]; ichan++) {
          int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
          int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
          int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
-         if (planeNumber >= 0) {  //plane, which is not found, has index -1
-            if (hitbit) {
-               if (adc < pedestalLimit) continue;
-               //get the index from the HBU array
-               //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
-               int coorx = getXcoordFromChipChannel(chipid, ichan);
-               int coory = getYcoordFromChipChannel(chipid, ichan);
-               //testbeam view: side slab in the bottom, electronics facing beam line:
-               //int coory = getXcoordFromChipChannel(chipid, ichan);
-               //int coorx = planesYsize - getYcoordFromChipChannel(chipid, ichan) - 1;
+	 int channel=ichan;
+         if(data[1]==-1){ //catch differences in klaus data
+		 channel=data[2];
+	 }
+         if (planeNumber < 0)
+	 	continue;  //plane, which is not found, has index -1
+         if (!hitbit)
+	 	continue;
+         if (adc < pedestalLimit)
+		 continue;
+         //get the index from the HBU array
+         //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
+         int coorx = getXcoordFromChipChannel(chipid, channel);
+         int coory = getYcoordFromChipChannel(chipid, channel);
+         //testbeam view: side slab in the bottom, electronics facing beam line:
+         //int coory = getXcoordFromChipChannel(chipid, channel);
+         //int coorx = planesYsize - getYcoordFromChipChannel(chipid, channeln) - 1;
 
-               int coordIndex = coorx * planesXsize + coory;
-               if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-               HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
-               //HBUs[planeNumber][coordIndex] = 1;
-               if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-               HBUHits[planeNumber]++;
-            }
-         }
+         int coordIndex = coorx * planesXsize + coory;
+         if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
+         HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
+         //HBUs[planeNumber][coordIndex] = 1;
+         if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+         HBUHits[planeNumber]++;
       }
       std::cout << "." << std::flush;
    }
@@ -122,11 +127,13 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
       //plane->SetSizeRaw(13, 13, 1, 0);
       int pixindex = 0;
-      plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
+      plane->SetSizeZS(planesXsize, planesYsize, 0, 1, 0);
+      //plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
       for (int x = 0; x < planesXsize; x++) {
          for (int y = 0; y < planesYsize; y++) {
             if (HBUs[i][x * planesXsize + y] >= 0) {
-               plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesXsize + y]);
+               //plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesXsize + y]);
+               plane->PushPixel(x, y, HBUs[i][x * planesXsize + y],0 /*time*/,false,0);
             }
          }
       }
