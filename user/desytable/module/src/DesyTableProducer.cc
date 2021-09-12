@@ -189,6 +189,7 @@ void DesyTableProducer::DoConfigure() {
 
 void DesyTableProducer::DoStartRun() {
    m_exit_of_run = false;
+   std::cout << "INFO: starting a run " <<GetRunNumber()<< std::endl;
 }
 void DesyTableProducer::DoStopRun() {
    m_exit_of_run = true;
@@ -224,12 +225,13 @@ void DesyTableProducer::RunLoop() {
          firstCycle = false;
          tp_readout = std::chrono::steady_clock::now();
          auto ev = eudaq::Event::MakeUnique("DesyTableRaw");
-         std::cout << "Position: H=" << h_mm << "mm, V=" << v_mm << "mm" << std::endl;
+         std::cout << "Run="<<GetRunNumber()<< " Position: H=" << h_mm << "mm, V=" << v_mm << "mm" << std::endl;
          ev->SetTag("POS_H_MM", std::to_string(h_mm));
          ev->SetTag("POS_V_MM", std::to_string(v_mm));
          SendEvent(std::move(ev));
          SetStatusTag("Y", std::to_string(v_mm));
          SetStatusTag("X", std::to_string(h_mm));
+	 EUDAQ_EXTRA_STREAMOUT("Position V=" + std::to_string(v_mm) + "mm H="+ std::to_string(h_mm) , std::cout, std::cerr);
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
    }
