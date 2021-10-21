@@ -68,13 +68,13 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       const auto & bl = ev->GetBlock(nblock++);
       data.resize(bl.size() / sizeof(int));
       memcpy(&data[0], &bl[0], bl.size());
-      if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
-      std::cout << "Block "<<nblock-1<<" has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
-      std::cout << "cycleNr="<<data[0];
-      std::cout << "  bxid="<<data[1];
-      std::cout << "  memcell="<<data[2];
-      std::cout << "  chipID="<<data[3];
-      std::cout << "  Nchannels="<<data[4]<<std::endl;
+      //if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
+      //std::cout << "Block "<<nblock-1<<" has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
+      //std::cout << "cycleNr="<<data[0];
+      //std::cout << "  bxid="<<data[1];
+      //std::cout << "  memcell="<<data[2];
+      //std::cout << "  chipID="<<data[3];
+      //std::cout << "  Nchannels="<<data[4]<<std::endl;
 
 
       //data structure of packet: data[i]=
@@ -90,7 +90,7 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       int chipid = data[3];
       int planeNumber = getPlaneNumberFromCHIPID(chipid);
       if (data[1] == 0) continue; //don't store dummy trigger
-      printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
+      //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
 
       for (int ichan = 0; ichan < data[4]; ichan++) {
          int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
