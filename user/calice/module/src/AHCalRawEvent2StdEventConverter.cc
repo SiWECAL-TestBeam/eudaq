@@ -13,7 +13,7 @@
 #define pedestalLimit 0 //minimum adc value, that will be displayed
 #define eventSizeLimit 1 //minimum size of the event which will be displayed
 
-class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
+class AHCalMultiHitRawEvent2StdEventConverter: public eudaq::StdEventConverter {
    public:
       bool Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const override;
       static const uint32_t m_id_factory = eudaq::cstr2hash("CaliceObject");
@@ -43,21 +43,24 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
 
 namespace {
    auto dummy0 = eudaq::Factory<eudaq::StdEventConverter>::
-         Register<AHCalRawEvent2StdEventConverter>(AHCalRawEvent2StdEventConverter::m_id_factory);
+         Register<AHCalMultiHitRawEvent2StdEventConverter>(AHCalMultiHitRawEvent2StdEventConverter::m_id_factory);
 }
 
-bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const {
+bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const {
    std::string sensortype = "AHCAL Layer"; //TODO ?? "HBU"
    auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
    size_t nblocks = ev->NumBlocks();
    std::vector<std::unique_ptr<eudaq::StandardPlane>> planes;
-   std::vector<int> HBUHits;
-   std::vector<std::array<int, planesXsize * planesYsize>> HBUs;         //HBU(aka plane) index, x*12+y
+   //std::vector<int> HBUHits;
+   //std::vector<std::array<int, planesXsize * planesYsize>> HBUs;         //HBU(aka plane) index, x*12+y
    for (int i = 0; i < planeCount; ++i) {
-      std::array<int, planesXsize * planesYsize> HBU;
-      HBU.fill(-1); //fill all channels to -1
-      HBUs.push_back(HBU); //add the HBU to the HBU
-      HBUHits.push_back(0);
+      //std::array<int, planesXsize * planesYsize> HBU;
+      //HBU.fill(-1); //fill all channels to -1
+      //HBUs.push_back(HBU); //add the HBU to the HBU
+      //HBUHits.push_back(0);
+      //std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
+      planes.push_back(std::make_unique<eudaq::StandardPlane>(i, "CaliceObject", sensortype));
+      planes.back()->SetSizeZS(planesXsize, planesYsize, 0, 1, 0);
    }
 
    unsigned int nblock = 10; // the first 10 blocks contain other information
@@ -91,7 +94,6 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
       int planeNumber = getPlaneNumberFromCHIPID(chipid);
       if (data[1] == 0) continue; //don't store dummy trigger
       //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
-
       for (int ichan = 0; ichan < data[4]; ichan++) {
          int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
          int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
@@ -115,40 +117,47 @@ bool AHCalRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdE
          //int coorx = planesYsize - getYcoordFromChipChannel(chipid, channeln) - 1;
 
          int coordIndex = coorx * planesXsize + coory;
-         if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-         HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
+         //if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
+	 int q = gainbit ? adc : 10 * adc;
+         //HBUs[planeNumber][coordIndex] = q;
          //HBUs[planeNumber][coordIndex] = 1;
-         if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-         HBUHits[planeNumber]++;
+         //if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+         //HBUHits[planeNumber]++;
+
+         planes[planeNumber]->PushPixel(coorx, coory, q, 0 /*time*/,false,0);
+         std::cout << "p" << std::flush;
       }
       std::cout << "." << std::flush;
    }
-   for (int i = 0; i < HBUs.size(); ++i) {
-      std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
-      //plane->SetSizeRaw(13, 13, 1, 0);
-      int pixindex = 0;
-      plane->SetSizeZS(planesXsize, planesYsize, 0, 1, 0);
-      //plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
-      for (int x = 0; x < planesXsize; x++) {
-         for (int y = 0; y < planesYsize; y++) {
-            if (HBUs[i][x * planesXsize + y] >= 0) {
-               //plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesXsize + y]);
-               plane->PushPixel(x, y, HBUs[i][x * planesXsize + y],0 /*time*/,false,0);
-            }
-         }
-      }
+   //for (int i = 0; i < HBUs.size(); ++i) {
+   //   std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
+   //   //plane->SetSizeRaw(13, 13, 1, 0);
+   //   int pixindex = 0;
+   //   //plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
+   //   for (int x = 0; x < planesXsize; x++) {
+   //      for (int y = 0; y < planesYsize; y++) {
+   //         if (HBUs[i][x * planesXsize + y] >= 0) {
+   //            //plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesXsize + y]);
+   //            plane->PushPixel(x, y, HBUs[i][x * planesXsize + y],0 /*time*/,false,0);
+   //         }
+   //      }
+   //   }
 
-      //if (ev->GetEventNumber() > 0) plane->SetTLUEvent(ev.GetEventNumber());
-      //save planes with hits hits to the onlinedisplay
+   //   //if (ev->GetEventNumber() > 0) plane->SetTLUEvent(ev.GetEventNumber());
+   //   //save planes with hits hits to the onlinedisplay
 
-      d2->AddPlane(*plane);
-      std::cout << ":" << std::flush;
+   //   d2->AddPlane(*plane);
+   //   std::cout << ":" << std::flush;
+   //}
+   for (int i = 0; i < planeCount; ++i){
+  	d2->AddPlane(*planes[i]); 
    }
+
    std::cout << ">" << std::endl;
    return true;
 }
 
-int AHCalRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const {
+int AHCalMultiHitRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const {
    //return (chipid >> 8);
    int module = (chipid >> 8);
    //   std::cout << " CHIP  " << chipid << " is in Module " << module << std::endl;
@@ -162,7 +171,7 @@ int AHCalRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const 
 //   return result;
 }
 
-int AHCalRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int channelNr) const {
+int AHCalMultiHitRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int channelNr) const {
    auto searchIterator = mapping.find(chipid & 0x0f);
    if (searchIterator == mapping.end()) return 0;
    auto asicXCoordBase = std::get<0>(searchIterator->second);
@@ -176,7 +185,7 @@ int AHCalRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int ch
 //   return subx;
 }
 
-int AHCalRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid, int channelNr) const {
+int AHCalMultiHitRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid, int channelNr) const {
    auto searchIterator = mapping.find(chipid & 0x0f);
    if (searchIterator == mapping.end()) return 0;
    auto asicYCoordBase = std::get<1>(searchIterator->second);
