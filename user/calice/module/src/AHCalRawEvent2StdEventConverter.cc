@@ -23,7 +23,8 @@ class AHCalRawEvent2StdEventConverter: public eudaq::StdEventConverter {
       int getXcoordFromChipChannel(int chipid, int channelNr) const;
       int getYcoordFromChipChannel(int chipid, int channelNr) const;
       const std::map<int, int> layerOrder = { //{module,layer}
-         { 42, 0 }, { 43, 1 }
+         { 1, 0 }, { 2, 1 },
+         { 3, 2 }, { 4, 3 }
 	 //         { 4, 3 }, { 5, 4 }
       };
 
