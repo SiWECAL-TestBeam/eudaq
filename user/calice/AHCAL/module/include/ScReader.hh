@@ -168,9 +168,6 @@ namespace eudaq {
          std::map<int, LDATimeData> _LDATimestampData; //maps READOUTCYCLE to LDA timestamps for that cycle (comes asynchronously with the data and tends to arrive before the ASIC packets)
 
          std::map<int, std::vector<std::vector<int> > > _LDAAsicData;              //maps readoutcycle to vector of "infodata"
-         std::map<int, std::vector<std::vector<int> > > _LDAKLAUSAsicData;             //maps readoutcycle to vector of "infodata" (single hit per block, bxid=-1,memCell used as channel number,nChannels=1)
-         //std::map<int, std::vector<KLauS_Hit> > _LDAKLAUSAsicData;              //maps readoutcycle to vector of klaus-hits
-//-- create LDA data structure for KLauS data
          std::map<int, int> _DaqErrors;              // <ReadoutCycleNumber, ErrorMask> if errormas is 0, everything is OK
 
          std::map<int, int> minLastBxid_Detector;              //stores the minimum! lowest bxid number  for any memory cell 16 (cell 15 when counting from 0)
