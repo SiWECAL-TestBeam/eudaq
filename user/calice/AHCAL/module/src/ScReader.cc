@@ -40,7 +40,6 @@ namespace eudaq {
 //      _tempmode = false;
 		cycleData.resize(6);
 		_LDAAsicData.clear();
-		_LDAKLAUSAsicData.clear();
 		_LDATimestampData.clear();
 		_RunTimesStatistics.clear();
 		_DaqErrors.clear();
@@ -119,14 +118,9 @@ namespace eudaq {
 		std::this_thread::sleep_for(std::chrono::seconds(waitQueueTimeS));
 		std::cout << "ScREader::OnStop after sleep()... " << std::endl;
 		_RunTimesStatistics.print(std::cout, _producer->getColoredTerminalMessages());
-		std::cout << "DEBUG: MAP sizes (SPIROC): " << _LDAAsicData.size() << "\t" << " (KLAUS): " << _LDAKLAUSAsicData.size() << "\t" << _LDATimestampData.size() << "\t last ROC: ";
+		std::cout << "DEBUG: MAP sizes (SPIROC): " << _LDAAsicData.size() << "\t" << _LDATimestampData.size() << "\t last ROC: ";
 		if (_LDAAsicData.crbegin() != _LDAAsicData.crend()) {
 			std::cout << _LDAAsicData.crbegin()->first;
-		} else
-			std::cout << "N/A";
-		std::cout << "\t";
-		if (_LDAKLAUSAsicData.crbegin() != _LDAKLAUSAsicData.crend()) {
-			std::cout << _LDAKLAUSAsicData.crbegin()->first;
 		} else
 			std::cout << "N/A";
 		std::cout << "\t";
@@ -408,7 +402,7 @@ namespace eudaq {
 						if ((dataPart[0] == 0x41) && (dataPart[1] == 0x43)) {
 							//possibility of SPIROC and KLAUS
 							//std::cout << "DEBUG: Analyzing KLAUS data, ROC " << LDA_Header_cycle << std::endl;
-							readKLAUSData(buf, _LDAKLAUSAsicData);
+							readKLAUSData(buf, _LDAAsicData);
 							continue;
 						}
 					}
@@ -1040,39 +1034,7 @@ namespace eudaq {
 //      keptEventCount = 100000;
 		//printf("ScReader::buildROCEvents(): %d in SPIROC buffer, %d in KLauS buffer\n",_LDAAsicData.size(),_LDAKLAUSAsicData.size());
 		int thisROC;
-		while ((_LDAAsicData.size() > keptEventCount) || (_LDAKLAUSAsicData.size() > keptEventCount )) {
-			int rocs[2];
-			rocs[1]=rocs[0]=-1;
-			bool add[2]={false,false};
-
-			if(!_LDAAsicData.empty())
-				rocs[0] = _LDAAsicData.begin()->first;
-			if(!_LDAKLAUSAsicData.empty())
-				rocs[1] = _LDAKLAUSAsicData.begin()->first;
-			//printf("rocs: %d, %d\n",rocs[0],rocs[1]);
-
-			//Find pairs of ASIC packets (Spiroc/KLauS) based on ROC
-			if(rocs[0]==rocs[1]){
-				printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
-				add[0]=true;
-				add[1]=true;
-				thisROC=rocs[0];
-				//_LDAAsicData.erase(_LDAAsicData.begin());
-				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
-
-			}else if( (rocs[1]==-1) || (rocs[0]<rocs[1])&&(rocs[0]>=0)){
-				printf("%4.4d\n",rocs[0]);
-				add[0]=true;
-				thisROC=rocs[0];
-				//_LDAAsicData.erase(_LDAAsicData.begin());
-
-			}else if( (rocs[0]==-1) || (rocs[1]<rocs[0])&&(rocs[1]>=0)){
-				printf("     %4.4d\n",rocs[1]);
-				add[1]=true;
-				thisROC=rocs[1];
-				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
-			}
-
+		while (_LDAAsicData.size() > keptEventCount){
 			//if needed, insert dummy events filling the gaps
 			while (_producer->getInsertDummyPackets() && (++_lastBuiltEventNr < thisROC)){
 				cout<<"ScReader::buildROCEvents(): Adding dummy Event "<<_lastBuiltEventNr<<endl;
@@ -1086,29 +1048,14 @@ namespace eudaq {
 			nev->SetTag("ROC", thisROC);
 			//nev->SetEventN(roc);
 
-
-			//insert Spiroc data
-			if(add[0]){
-				std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
-				for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
-					if (idata->size()) {
-						nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
-					}
+			//insert data
+			std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
+			for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
+				if (idata->size()) {
+					nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
 				}
-				_LDAAsicData.erase(_LDAAsicData.begin());
-			}//-insert Spiroc data
-
-			//insert KLauS data
-			if(add[1]){
-				std::vector<std::vector<int> > &data = _LDAKLAUSAsicData.begin()->second;
-				for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
-					if (idata->size()) {
-						nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
-					}
-				}
-				_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
-			}//insert KLauS data
-
+			}
+			_LDAAsicData.erase(_LDAAsicData.begin());
 
 			//insert timestamp data
 			if (!_producer->getIgnoreLdaTimestamps()) {
@@ -1745,12 +1692,8 @@ void ScReader::readAHCALData(std::deque<unsigned char> &buf, std::map<int, std::
 		out << "Last processed TriggerID: " << _trigID << " (counts from " << _producer->getLdaTrigidStartsFrom() << "?)" << std::endl;
 		out << "Last built event #: " << _lastBuiltEventNr << std::endl;
 		out << "============================================================" << std::endl;
-		out << "#Left in ASIC buffers (SPIROC):" << std::endl;
+		out << "#Left in ASIC buffers:" << std::endl;
 		for (auto &it : _LDAAsicData) {
-			out << "ROC " << it.first << "\tsize " << it.second.size() << std::endl;
-		}
-		out << "#Left in ASIC buffers (KLAUS):" << std::endl;
-		for (auto &it : _LDAKLAUSAsicData) {
 			out << "ROC " << it.first << "\tsize " << it.second.size() << std::endl;
 		}
 /*
