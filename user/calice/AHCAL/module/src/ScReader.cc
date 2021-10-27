@@ -489,7 +489,7 @@ namespace eudaq {
 		}
 		//append temperature etc.
 
-      std::cout << "DEBUG/end: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
+      //std::cout << "DEBUG/end: buildEvents size _LDAAsicData=" << _LDAAsicData.size() << " _LDAKLAUSAsicData=" << _LDAKLAUSAsicData.size() << " _LDATimestampData=" << _LDATimestampData.size() << std::endl << std::flush;
 		
 	}
 
@@ -1035,7 +1035,7 @@ namespace eudaq {
 	void ScReader::buildROCEvents(std::deque<eudaq::EventUP> &EventQueue, bool dumpAll) {
 		int keptEventCount = dumpAll ? 0 : _producer->getKeepBuffered(); //how many ROCs to keep in the data maps
 //      keptEventCount = 100000;
-		printf("ScReader::buildROCEvents(): %d in SPIROC buffer, %d in KLauS buffer\n",_LDAAsicData.size(),_LDAKLAUSAsicData.size());
+		//printf("ScReader::buildROCEvents(): %d in SPIROC buffer, %d in KLauS buffer\n",_LDAAsicData.size(),_LDAKLAUSAsicData.size());
 		int thisROC;
 		while ((_LDAAsicData.size() > keptEventCount) || (_LDAKLAUSAsicData.size() > keptEventCount )) {
 			int rocs[2];
@@ -1050,7 +1050,7 @@ namespace eudaq {
 
 			//Find pairs of ASIC packets (Spiroc/KLauS) based on ROC
 			if(rocs[0]==rocs[1]){
-				printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
+				//printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
 				add[0]=true;
 				add[1]=true;
 				thisROC=rocs[0];
@@ -1058,13 +1058,13 @@ namespace eudaq {
 				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
 
 			}else if( (rocs[1]==-1) || (rocs[0]<rocs[1])&&(rocs[0]>=0)){
-				printf("%4.4d\n",rocs[0]);
+				//printf("%4.4d\n",rocs[0]);
 				add[0]=true;
 				thisROC=rocs[0];
 				//_LDAAsicData.erase(_LDAAsicData.begin());
 
 			}else if( (rocs[0]==-1) || (rocs[1]<rocs[0])&&(rocs[1]>=0)){
-				printf("     %4.4d\n",rocs[1]);
+				//printf("     %4.4d\n",rocs[1]);
 				add[1]=true;
 				thisROC=rocs[1];
 				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
@@ -1383,7 +1383,7 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 			while(ptr < pkt.PayloadEnd())
 			{
 				if(ptr[0]!=0xfe){//non-empty hit?
-					unsigned chipid_global=((pkt.HDR_PORT()+42)<<8) + pkt.PKT_asic();
+					unsigned chipid_global=((pkt.HDR_PORT()+1)<<8) + pkt.PKT_asic();
 					//Add LDA number and port number in the higher bytes of the int
 					KLauS_Hit hit(ptr,pkt.HDR_ROC(), pkt.PKT_asic());
 					//readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
