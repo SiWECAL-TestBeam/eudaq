@@ -34,6 +34,9 @@ namespace eudaq {
 		_cycleNoTS = -1;
 		_trigID = _producer->getLdaTrigidStartsFrom() - 1;
 		_trigidNotKnown = true;
+
+		_TimeOffset_KLAUS = 8500; //in units of ns;
+		_BXID_length = 4e3; //in units of ns 
 //      _tempmode = false;
 		cycleData.resize(6);
 		_LDAAsicData.clear();
@@ -1050,7 +1053,7 @@ namespace eudaq {
 
 			//Find pairs of ASIC packets (Spiroc/KLauS) based on ROC
 			if(rocs[0]==rocs[1]){
-				//printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
+				printf("%4.4d %4.4d\n",rocs[0],rocs[1]);
 				add[0]=true;
 				add[1]=true;
 				thisROC=rocs[0];
@@ -1058,13 +1061,13 @@ namespace eudaq {
 				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
 
 			}else if( (rocs[1]==-1) || (rocs[0]<rocs[1])&&(rocs[0]>=0)){
-				//printf("%4.4d\n",rocs[0]);
+				printf("%4.4d\n",rocs[0]);
 				add[0]=true;
 				thisROC=rocs[0];
 				//_LDAAsicData.erase(_LDAAsicData.begin());
 
 			}else if( (rocs[0]==-1) || (rocs[1]<rocs[0])&&(rocs[1]>=0)){
-				//printf("     %4.4d\n",rocs[1]);
+				printf("     %4.4d\n",rocs[1]);
 				add[1]=true;
 				thisROC=rocs[1];
 				//_LDAKLAUSAsicData.erase(_LDAKLAUSAsicData.begin());
@@ -1333,7 +1336,6 @@ namespace eudaq {
 		buf.erase(buf.begin(), buf.begin() + length + e_sizeLdaHeader);
 	}
 
-//void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<KLauS_Hit> > &AHCALData) {
 void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::vector<std::vector<int> > > &AHCALData) {
 		LDA_PKT pkt(buf,length+e_sizeLdaHeader);
 //		pkt.PrintLDAHDR();
@@ -1389,9 +1391,19 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 					//readoutCycle.emplace_back(ptr,pkt.HDR_ROC(),pkt.PKT_asic());
 					//hit.Print();
 					//printf("ASIC-ID = %u\n",chipid_global);
+					//
+					//TODO: change data format to have BXIDs for KLauS DONE
+					//TODO: change standard converter to adapt DONE
+					//TODO: Parameters for BXID & Offset - Jiri
+					//TODO: Check LCIO requirements - Jiri
+					//TODO: Insert KLAUS directly in _LDAAsicData, remove _LDAKLAUSAsicData - Konrad DONE
+					//TODO: Simplify BuildROCevents - Konrad DONE
+					//TODO: Check if other event building methods work - Jiri
 					vector<int> infodata;
 					infodata.push_back((int) _cycleNoK);
-					infodata.push_back(-1); //bxid is -1 for KLauS hits
+					int bxid_reconstructed = (hit.GetTime() - _TimeOffset_KLAUS)/_BXID_length; 
+
+					infodata.push_back(bxid_reconstructed); //bxid is -1 for KLauS hits
 					infodata.push_back(hit.GetASICChannel()); //memCell is used as channel number for KLauS hits
 					infodata.push_back(chipid_global);
 					infodata.push_back(1);//number of channels is always 1 for KLauS hits

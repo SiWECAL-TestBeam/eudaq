@@ -181,6 +181,9 @@ namespace eudaq {
          uint32_t _timestampTbCampaign;
 
          RunTimeStatistics _RunTimesStatistics;
+
+	uint64_t _TimeOffset_KLAUS;
+	uint64_t _BXID_length; 
    };
 }
 

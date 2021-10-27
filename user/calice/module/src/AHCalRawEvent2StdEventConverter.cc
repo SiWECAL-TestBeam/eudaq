@@ -104,10 +104,8 @@ bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eud
          int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
          int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
 	 int channel=ichan;
-	const int time_offset=7500; //TODO
-         if(data[1]==-1){ //catch differences in klaus data
+         if(data[4]==1){ //catch differences in klaus data
 		channel=data[2];
-		bxid=(tdc-time_offset)/4e3;
 	 }
          if (planeNumber < 0)
 	 	continue;  //plane, which is not found, has index -1
