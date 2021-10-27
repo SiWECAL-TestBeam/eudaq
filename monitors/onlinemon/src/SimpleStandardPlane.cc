@@ -113,46 +113,49 @@ void SimpleStandardPlane::doClustering() {
   if (npixels_hit > 1) // (npixels_hit < 2000 ))
   {
     std::sort(_hits.begin(), _hits.end(), SortHitsByXY());
-    for (unsigned int aPixel = 0; aPixel < npixels_hit; aPixel++) {
-      continue_flag = true;
-      const SimpleStandardHit &aPix = _hits.at(aPixel);
-      for (unsigned int bPixel = aPixel + 1; bPixel < npixels_hit; bPixel++) {
-        if (continue_flag != true)
-          break;
-        const SimpleStandardHit &bPix = _hits.at(bPixel);
-        unsigned int xDist = abs(aPix.getX() - bPix.getX());
-        unsigned int yDist = abs(aPix.getY() - bPix.getY());
+    if(!is_AHCAL){ //do not do clustering for AHCAL layers
+      for (unsigned int aPixel = 0; aPixel < npixels_hit; aPixel++) {
+        continue_flag = true;
+        const SimpleStandardHit &aPix = _hits.at(aPixel);
+        for (unsigned int bPixel = aPixel + 1; bPixel < npixels_hit; bPixel++) {
+          if (continue_flag != true)
+            break;
+          const SimpleStandardHit &bPix = _hits.at(bPixel);
+          unsigned int xDist = abs(aPix.getX() - bPix.getX());
+          unsigned int yDist = abs(aPix.getY() - bPix.getY());
 
-        if ((xDist <= minXDistance) &&
-            (yDist <= minYDistance)) { // this means they are neighbors in
-                                       // x-direction && / this means they are
-                                       // neighbors in y-direction
-          if ((clusterNumber.at(aPixel) == NOCLUSTER) &&
-              clusterNumber.at(bPixel) == NOCLUSTER) { // none of these pixels
-                                                       // have been assigned to
-                                                       // a cluster
-            //++nClusters;
-            clusterNumber.at(aPixel) = ++nClusters;
-            clusterNumber.at(bPixel) = nClusters;
-          } else if ((clusterNumber.at(aPixel) == NOCLUSTER) &&
-                     (clusterNumber.at(bPixel) !=
-                      NOCLUSTER)) { // b was assigned already, a not
-            clusterNumber.at(aPixel) = clusterNumber.at(bPixel);
-          } else if ((clusterNumber.at(aPixel) != NOCLUSTER) &&
-                     (clusterNumber.at(bPixel) ==
-                      NOCLUSTER)) { // a was assigned already, b not
-            clusterNumber.at(bPixel) = clusterNumber.at(aPixel);
-          } else { // both pixels have a cluster number already
-            int min =
-                std::min(clusterNumber.at(aPixel), clusterNumber.at(bPixel));
-            clusterNumber.at(aPixel) = min;
-            clusterNumber.at(bPixel) = min;
+          if ((xDist <= minXDistance) &&
+              (yDist <= minYDistance)) { // this means they are neighbors in
+                                         // x-direction && / this means they are
+                                         // neighbors in y-direction
+            if ((clusterNumber.at(aPixel) == NOCLUSTER) &&
+                clusterNumber.at(bPixel) == NOCLUSTER) { // none of these pixels
+                                                         // have been assigned to
+                                                         // a cluster
+              //++nClusters;
+              clusterNumber.at(aPixel) = ++nClusters;
+              clusterNumber.at(bPixel) = nClusters;
+            } else if ((clusterNumber.at(aPixel) == NOCLUSTER) &&
+                       (clusterNumber.at(bPixel) !=
+                        NOCLUSTER)) { // b was assigned already, a not
+              clusterNumber.at(aPixel) = clusterNumber.at(bPixel);
+            } else if ((clusterNumber.at(aPixel) != NOCLUSTER) &&
+                       (clusterNumber.at(bPixel) ==
+                        NOCLUSTER)) { // a was assigned already, b not
+              clusterNumber.at(bPixel) = clusterNumber.at(aPixel);
+            } else { // both pixels have a cluster number already
+              int min =
+                  std::min(clusterNumber.at(aPixel), clusterNumber.at(bPixel));
+              clusterNumber.at(aPixel) = min;
+              clusterNumber.at(bPixel) = min;
+            }
+          } else { // these pixels are not neighbored
+            continue_flag = false;
           }
-        } else { // these pixels are not neighbored
-          continue_flag = false;
-        }
-      } // inner for loop
-    } // outer for loop
+        } // inner for loop
+      } // outer for loop
+    }
+    //assign one-hit clusters to all remaining hits
     for (unsigned int aPixel = 0; aPixel < npixels_hit; aPixel++)
       if (clusterNumber.at(aPixel) == NOCLUSTER) {
         ++nClusters;
@@ -195,35 +198,50 @@ void SimpleStandardPlane::doClustering() {
 }
 
 void SimpleStandardPlane::setPixelType(std::string name) {
+  //std::cout << "Layer #"<<_id<<" has name " <<name<< std::endl;
   if (name == "MIMOSA26") {
     is_MIMOSA26 = true;
     is_UNKNOWN = false;
+    //std::cout << "Layer #"<<_id<<" is of type MIMOSA26" << std::endl;
   } else if (name == "FORTIS") {
     is_FORTIS = true;
     is_UNKNOWN = false;
+    //std::cout << "Layer #"<<_id<<" is of type FORTIS" << std::endl;
   } else if (name == "DEPFET") {
     is_DEPFET = true;
     is_UNKNOWN = false;
     AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type DEPFET" << std::endl;
   } else if (name == "APIX") {
     is_APIX = true;
     is_UNKNOWN = false;
     AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type APIX" << std::endl;
   } else if (name == "USBPIX") {
     is_USBPIX = true;
     is_UNKNOWN = false;
     AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type USBPIX" << std::endl;
   } else if (name == "USBPIXI4" || name == "USBPIXI4B") {
     is_USBPIXI4 = true;
     is_UNKNOWN = false;
     AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type USBPIXI4*" << std::endl;
   } else if (name == "Explorer20x20" || name == "Explorer30x30") {
     is_EXPLORER = true;
     is_UNKNOWN = false;
     AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type Explorer" << std::endl;
+  } else if (name == "AHCAL Layer") {
+    is_AHCAL = true;
+    is_UNKNOWN = false;
+    AnalogPixelType = true;
+    //std::cout << "Layer #"<<_id<<" is of type AHCAL [-> Clustering disabled]" << std::endl;
   } else if (name == "pALPIDEfs") {
     is_UNKNOWN = false;
+    //std::cout << "Layer #"<<_id<<" is of type pALPIDEfs" << std::endl;
   } else {
     is_UNKNOWN = true;
+    //std::cout << "Layer #"<<_id<<" is of type UNKNOWN" << std::endl;
   }
 }
