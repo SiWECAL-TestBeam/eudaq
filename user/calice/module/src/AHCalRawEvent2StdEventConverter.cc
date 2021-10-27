@@ -4,12 +4,13 @@
 //TODO remove the _WIN32 if not necessary in linux
 #include <array>
 #endif
+#include <memory>
 
 //parameters to be later provided by a configuration file
 #define planesXsize 12
 #define planesYsize 12
 
-#define planeCount 2
+#define planeCount 4
 #define pedestalLimit 0 //minimum adc value, that will be displayed
 #define eventSizeLimit 1 //minimum size of the event which will be displayed
 
@@ -60,7 +61,8 @@ bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eud
       //HBUs.push_back(HBU); //add the HBU to the HBU
       //HBUHits.push_back(0);
       //std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
-      planes.push_back(std::make_unique<eudaq::StandardPlane>(i, "CaliceObject", sensortype));
+      //planes.push_back(std::make_unique<eudaq::StandardPlane>(i, "CaliceObject", sensortype));
+      planes.push_back(std::unique_ptr<eudaq::StandardPlane>(new eudaq::StandardPlane(i, "CaliceObject", sensortype)));
       planes.back()->SetSizeZS(planesXsize, planesYsize, 0, 1, 0);
    }
 
@@ -91,17 +93,21 @@ bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eud
       //i=NC+5 to NC+NC+4  -->  14 bits that contains ADC and again a copy of the hit/gainbit
       //debug prints:
       //std:cout << "Data_" << data[0] << "_" << data[1] << "_" << data[2] << "_" << data[3] << "_" << data[4] << "_" << data[5] << std::endl;
+      uint64_t bxid=data[1];
       int chipid = data[3];
       int planeNumber = getPlaneNumberFromCHIPID(chipid);
       if (data[1] == 0) continue; //don't store dummy trigger
       //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
       for (int ichan = 0; ichan < data[4]; ichan++) {
+         uint64_t tdc = data[5 +           ichan]; // extract tdc
          int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
          int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
          int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
 	 int channel=ichan;
+	const int time_offset=7500; //TODO
          if(data[1]==-1){ //catch differences in klaus data
-		 channel=data[2];
+		channel=data[2];
+		bxid=(tdc-time_offset)/4e3;
 	 }
          if (planeNumber < 0)
 	 	continue;  //plane, which is not found, has index -1
@@ -119,16 +125,17 @@ bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eud
 
          int coordIndex = coorx * planesXsize + coory;
          //if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-	 int q = gainbit ? adc : 10 * adc;
+	 int q = gainbit ? adc : 4096 + adc;
+	 uint64_t time = bxid*10000000 + tdc;
          //HBUs[planeNumber][coordIndex] = q;
          //HBUs[planeNumber][coordIndex] = 1;
          //if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
          //HBUHits[planeNumber]++;
 
-         planes[planeNumber]->PushPixel(coorx, coory, q, 0 /*time*/,false,0);
-         std::cout << "p" << std::flush;
+         planes[planeNumber]->PushPixel(coorx, coory, q, time,false,0);
+         //std::cout << "p" << std::flush;
       }
-      std::cout << "." << std::flush;
+      //std::cout << "." << std::flush;
    }
    //for (int i = 0; i < HBUs.size(); ++i) {
    //   std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensortype));
