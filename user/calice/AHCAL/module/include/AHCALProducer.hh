@@ -79,6 +79,8 @@ namespace eudaq {
          int getLdaTrigidStartsFrom() const;
          int getAhcalbxid0Offset() const;
          int getAhcalbxidWidth() const;
+         int getKlausBxid0OffsetNs() const;
+         int getKlausTdcBinPs() const;
          int getInsertDummyPackets() const;
          int getDebugKeepBuffered() const;
          int getGenerateTriggerIDFrom() const;
@@ -103,6 +105,8 @@ namespace eudaq {
          int _LdaTrigidStartsFrom;   // triggerID number of first valid event in case it doesn't start from 0
          int _AHCALBXID0Offset; //offset from start acquisition Timestamp to BXID0 (in 25ns steps). Varies with AHCAL powerpulsing setting and DIF firmware
          int _AHCALBXIDWidth; //length of the bxid in 25 ns steps
+         int _KlausBXID0OffsetNs; //offset to the BXID0 start
+         int _KlausTDCBinPs; //bin size of the KLauS TDC:
          int _InsertDummyPackets; //1=Put dummy packets to maintain an uninterrupted sequence of TriggerIDs. 0=don't inset anything
          int _DebugKeepBuffered; //1=keep events in buffer and don't send them to data collector
          int _KeepBuffered; // how many events to keep in the buffer

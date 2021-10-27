@@ -83,6 +83,8 @@ void AHCALProducer::DoConfigure() {
    _LdaTrigidStartsFrom = param.Get("LdaTrigidStartsFrom", 0);
    _AHCALBXID0Offset = param.Get("AHCALBXID0Offset", 2123); //default for mini-LDA, new DIF and no powerpulsing
    _AHCALBXIDWidth = param.Get("AHCALBXIDWidth", 160); //4us Testbeam mode is default
+   _KlausBXID0OffsetNs = param.Get("KlausBXID0OffsetNs", 8750);
+   _KlausTDCBinPs = param.Get("KlausTDCBinPs", 200000)
    _GenerateTriggerIDFrom = param.Get("GenerateTriggerIDFrom", 0);
    _IgnoreLdaTimestamps = param.Get("IgnoreLdaTimestamps", 0);
    _StartWaitSeconds = param.Get("StartWaitSeconds", 0);
@@ -521,4 +523,14 @@ int AHCALProducer::getMaximumBxid() const {
 
 int AHCALProducer::getMinEventHits() const {
    return _minEventHits;
+}
+
+int AHCALProducer::getKlausBxid0OffsetNs() const
+{
+   return _KlausBXID0OffsetNs;
+}
+
+int AHCALProducer::getKlausTdcBinPs() const
+{
+   return _KlausTDCBinPs;
 }
