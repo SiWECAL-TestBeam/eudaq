@@ -35,8 +35,6 @@ namespace eudaq {
 		_trigID = _producer->getLdaTrigidStartsFrom() - 1;
 		_trigidNotKnown = true;
 
-		_TimeOffset_KLAUS = 8500; //in units of ns;
-		_BXID_length = 4e3; //in units of ns 
 //      _tempmode = false;
 		cycleData.resize(6);
 		_LDAAsicData.clear();
@@ -579,11 +577,11 @@ namespace eudaq {
 					std::cout << "Info: Possibly incomplete BXID=" << AhcalBxid << " in ROC=" << roc << ". Another layer got full at bxid="
 							<< minLastBxid_Detector[roc] << std::endl;
 				}
-				if (AhcalBxid > (minLastBxid_Detector[roc] + 4)) {
-					EUDAQ_ERROR_STREAMOUT(
-							"BXID " + to_string(AhcalBxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
-									+ " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
-				}
+				// if (AhcalBxid > (minLastBxid_Detector[roc] + 4)) {
+				// 	EUDAQ_ERROR_STREAMOUT(
+				// 			"BXID " + to_string(AhcalBxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
+				// 					+ " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
+				// }
 				bxidComplete = false; //throw away potentially incomplete bxid, because previous bxid has ben reached by some memory cell 16
 			}
 		}
@@ -939,12 +937,12 @@ namespace eudaq {
 			for (std::vector<int> &dit : data) { // = data.begin(); dit != data.end(); ++dit
 				int bxid = (int) dit[1];
 				if (minLastBxid_Detector.count(roc)) {
-					if (bxid > (minLastBxid_Detector[roc] + 4)) {
-						EUDAQ_ERROR_STREAMOUT(
-								"BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
-										+ " ASIC="
-										+ to_string(dit[3] & 0xFF) + " Module=" + to_string(dit[3] >> 8), std::cout, std::cerr);
-					}
+					// if (bxid > (minLastBxid_Detector[roc] + 4)) {
+					// 	EUDAQ_ERROR_STREAMOUT(
+					// 			"BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
+					// 					+ " ASIC="
+					// 					+ to_string(dit[3] & 0xFF) + " Module=" + to_string(dit[3] >> 8), std::cout, std::cerr);
+					// }
 					if (bxid > minLastBxid_Detector[roc]) {
 						continue; //throw away potentially incomplete bxid, because previous bxid has ben reached by some memory cell 16
 					}
@@ -1348,7 +1346,10 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 					//TODO: Check if other event building methods work - Jiri
 					vector<int> infodata;
 					infodata.push_back((int) _cycleNoK);
-					int bxid_reconstructed = (hit.GetTime() - _TimeOffset_KLAUS)/_BXID_length; 
+
+					
+					int bxid_width=_producer->getAhcalbxidWidth()*25*1e6/_producer->getKlausTdcBinPs(); /*in ns*/
+					int bxid_reconstructed = (hit.GetTime() - _producer->getKlausBxid0OffsetNs())/bxid_width ; 
 
 					infodata.push_back(bxid_reconstructed); //bxid is -1 for KLauS hits
 					infodata.push_back(hit.GetASICChannel()); //memCell is used as channel number for KLauS hits

@@ -179,8 +179,6 @@ namespace eudaq {
 
          RunTimeStatistics _RunTimesStatistics;
 
-	uint64_t _TimeOffset_KLAUS;
-	uint64_t _BXID_length; 
    };
 }
 

@@ -123,7 +123,8 @@ bool AHCalMultiHitRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eud
 
          int coordIndex = coorx * planesXsize + coory;
          //if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-	 int q = gainbit ? adc : 4096 + adc;
+	 //int q = gainbit ? adc : 4096 + adc;
+	 int q = adc;
 	 uint64_t time = bxid*10000000 + tdc;
          //HBUs[planeNumber][coordIndex] = q;
          //HBUs[planeNumber][coordIndex] = 1;
