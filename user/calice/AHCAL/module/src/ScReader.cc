@@ -1348,7 +1348,8 @@ void ScReader::readKLAUSData(std::deque<unsigned char> &buf, std::map<int, std::
 					infodata.push_back((int) _cycleNoK);
 
 					
-					int bxid_width=_producer->getAhcalbxidWidth()*25*1e6/_producer->getKlausTdcBinPs(); /*in ns*/
+					//int bxid_width=_producer->getAhcalbxidWidth()*25*1e6; /*in ns*/
+                                        int bxid_width=_producer->getAhcalbxidWidth()*25; /*in ns*/
 					int bxid_reconstructed = (hit.GetTime() - _producer->getKlausBxid0OffsetNs())/bxid_width ; 
 
 					infodata.push_back(bxid_reconstructed); //bxid is -1 for KLauS hits
