@@ -1,0 +1,26 @@
+[global]
+repeatScans = 0
+allowNested = 1 # overrides local nested arguments
+timeBasedScan = 1 # 1 = true :)
+timePerStep = 900 #in seconds for now
+#nEventsPerStep   = 2
+
+[0]
+nested = 0
+default = 0
+start = 0
+stop = 180
+step = 30
+name = Producer.DesyTableProducer
+##eventCounter = Producer.DesyTableProducer
+parameter = VERTICAL_POSITION_MM
+
+[1]
+nested = 1
+default = 0
+start = 0
+stop = 180
+step = 30
+name = Producer.DesyTableProducer
+#eventCounter = Producer.DesyTableProducer
+parameter = HORIZONTAL_POSITION_MM
