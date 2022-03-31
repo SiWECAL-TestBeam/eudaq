@@ -42,6 +42,7 @@ namespace eudaq {
 
     bool _debug=false;
     bool _ASCIIOUT=false;
+    int previous_cycleID=-1;
     virtual void Read(std::deque<unsigned char> & buf, std::deque<eudaq::EventUP> & deqEvent) override;
     virtual void OnStart(int runNo) override;
     virtual void OnStop(int waitQueueTimeS) override;
@@ -106,7 +107,6 @@ namespace eudaq {
     unsigned short trailerWord;
     int rawTSD ;
     int rawAVDD0, rawAVDD1;
-    int previous_cycleID;
     int cycleID;
     int transmitID;
     double startAcqTimeStamp;
@@ -123,6 +123,7 @@ namespace eudaq {
     int skirocEventNumber;
     int nhits[SINGLE_SKIROC_EVENT_SIZE];
 
+    void initRawFrame(bool first);
     eudaq::EventUP nev;
     eudaq::RawEvent *nev_raw;
     
@@ -144,7 +145,8 @@ namespace eudaq {
     void DecodeAndSendRawFrame(std::vector<unsigned char> ucharValFrameVec);
     void prepareEudaqRawPacket(eudaq::RawEvent * ev);
     void colorPrint(const std::string &colorString, const std::string& msg);
-
+    void insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent, int ievent );
+    bool firstdummy=false;
  
     UnfinishedPacketStates _unfinishedPacketState;
 

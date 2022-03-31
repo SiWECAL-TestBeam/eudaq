@@ -97,11 +97,12 @@ void SiWECALProducer::DoStartRun() {
       std::cout << std::endl;
    }
    std::cout << "SiWECALProducer::OnStartRun _reader->OnStart(param);" << std::endl; //DEBUG
+   _reader->previous_cycleID=-1;
    _reader->OnStart(_runNo);
    std::cout << "Start Run: " << _runNo << std::endl;
    _running = true;
    _stopped = false;
-
+   
 }
 
 void SiWECALProducer::OpenRawFile(unsigned param, bool _writerawfilename_timestamp) {
@@ -271,9 +272,8 @@ void SiWECALProducer::RunLoop() {
      //}
       // wait until configured and connected
       std::unique_lock<std::mutex> myLock(_mufd);
-
       int size = 0;
-      if ((_fd <= 0) ) {
+      if ((_fd <= 0) ){
          myLock.unlock();
          std::this_thread::sleep_for(std::chrono::milliseconds(100));
          continue;
@@ -287,11 +287,15 @@ void SiWECALProducer::RunLoop() {
       if (size > 0) {
          //_last_readout_time = std::time(NULL);
          if (_writeRaw && _rawFile.is_open()) _rawFile.write(buf, size);
+
          // C array to vector
          copy(buf, buf + size, back_inserter(bufRead));
+
 	 if (_reader) _reader->Read(bufRead, deqEvent);
+
          // send events : remain the last event
          if (_stopped) continue;   //sending the events to a stopped data collector will crash producer, but we still need to flush the TCP buffers
+
 	 try {
 	   sendallevents(deqEvent, 1);
          } catch (Exception& e) {
@@ -301,13 +305,12 @@ void SiWECALProducer::RunLoop() {
          continue;
       } else
          if (size == -1) {
-            if (errno == EAGAIN) continue;
+	   if (errno == EAGAIN) continue;
             std::cout << "Error on read: " << errno << " Disconnect and going to the waiting mode." << endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             break;
          } else
             if (size == 0) {
-	      //	      CloseConnection();
 	      std::cout << "Socket disconnected. going to the waiting mode." << endl;
 	      break;
             }
@@ -322,7 +325,6 @@ void SiWECALProducer::RunLoop() {
 	  std::cout << "Cannot send events! sendallevents1 exception: " << e.what() << endl;
 	}
       }
-
    }
    
    _stopped = 1;

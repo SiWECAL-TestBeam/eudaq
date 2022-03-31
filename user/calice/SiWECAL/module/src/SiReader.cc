@@ -37,6 +37,8 @@ namespace eudaq {
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
+    initRawFrame(true);
+    
     // set the connection and send "start runNo"
     cout << "opening connection" << endl;
     _producer->OpenConnection();
@@ -120,9 +122,13 @@ namespace eudaq {
     _RunTimesStatistics.clear();
     
   }
+  
+  void SiReader::initRawFrame(bool first) {
 
-  void SiReader::DecodeAndSendRawFrame(std::vector<unsigned char> ucharValFrameVec) {
-
+    if(first==true) {
+      previous_cycleID=-1;
+      firstdummy=false;
+    }
     coreDaughterIndex=-1;
     chipId=-1;
     asuIndex=-1; 
@@ -158,6 +164,11 @@ namespace eudaq {
     }
     valid_frame=0;
 
+  }
+
+  void SiReader::DecodeAndSendRawFrame(std::vector<unsigned char> ucharValFrameVec) {
+
+    initRawFrame(false);
     if(_ASCIIOUT)cout<<" New DECODERAWFRAME "<<endl;
     chipId = ucharValFrameVec.at(datasize -2-2);
     if(_debug) std::cout<<"chipId:"<<dec<<chipId<<std::endl;
@@ -165,22 +176,22 @@ namespace eudaq {
     asuIndex = (int)(chipId/NB_OF_SKIROCS_PER_ASU);
     if(_debug) std::cout<<"SkirocIndex:"<<dec<<chipId - asuIndex*NB_OF_SKIROCS_PER_ASU<<std::endl;
     skirocIndex = chipId -asuIndex*NB_OF_SKIROCS_PER_ASU;
-
+    
     nbOfSingleSkirocEventsInFrame =  (int)((datasize-2-2)/SINGLE_SKIROC_EVENT_SIZE);
     if(_debug) std::cout<<"nbOfSingleSkirocEventsInFrame: "<<dec<<nbOfSingleSkirocEventsInFrame<<std::endl;
 
-  cycleID  = 0;
-  transmitID = 0;
-  startAcqTimeStamp = 0;
-  rawTSD = 0;
-  rawAVDD0 = 0;
-  rawAVDD1 = 0;
-  temperature = 0.0; // in °C
-  AVDD0 = 0.0; // in Volts
-  AVDD1 = 0.0; // in Volts
-  i=0;
-  n=0;
-
+    cycleID  = 0;
+    transmitID = 0;
+    startAcqTimeStamp = 0;
+    rawTSD = 0;
+    rawAVDD0 = 0;
+    rawAVDD1 = 0;
+    temperature = 0.0; // in °C
+    AVDD0 = 0.0; // in Volts
+    AVDD1 = 0.0; // in Volts
+    i=0;
+    n=0;
+    
 
   // metadata
   for(n= 0; n < 16; n++)
@@ -324,6 +335,8 @@ namespace eudaq {
 	  if (bufsize < 10) throw BufferProcessigExceptions::OK_NEED_MORE_DATA; 
 
           if(buf[0]==0xAB) {
+	    if(_debug) cout<<" --cycleID:"<<cycleID<<" previous:"<<previous_cycleID<<endl;
+
             //buf.pop_front();
 	    if(buf[1]==0xCD) {
 	      if(_debug) cout<<"ibuf:"<<0<<"hex: "<<hex<<buf[1]<<endl;
@@ -336,7 +349,7 @@ namespace eudaq {
 	      datasize=0;
 	      unsigned short framesize =   ((unsigned short)b << 8) + a;
 	      datasize=int(framesize);
-	      if(_debug) cout<<" ---- dec:"<<std::dec<<framesize<<endl;
+	      if(_debug) cout<<" ---- dec:"<<std::dec<<framesize<<" "<<datasize<<endl;
 	      if(buf.size()<(datasize+10) ) throw BufferProcessigExceptions::OK_NEED_MORE_DATA;
 	      int coreDaughterIndex=buf[5];
 	      int slabAdd=buf[8];
@@ -351,21 +364,34 @@ namespace eudaq {
 		if(_debug) cout<<datasize<<" LOOP, ibuf="<<ibuf<<" hex:"<<hex<<buf[ibuf]<<"  dec:"<<dec<<buf[ibuf]<<std::endl;
 	      }
 	     
-
+	      
 	      unsigned short trailerWord =   ((unsigned short)ucharValFrameVec.at(datasize -1) << 8) + ucharValFrameVec.at(datasize -2);
 	      if(_debug) cout<<"Trailer Word hex:"<<hex<<trailerWord<<" dec:"<<dec<<trailerWord<<std::endl;
 
 	      if(trailerWord == 0x9697) {
+
+		if(cycleID == -1 && previous_cycleID==-1 && firstdummy==false) {
+		  insertDummyEvent(deqEvent,0);
+		  firstdummy=true;
+		}
+		
 		if(_debug) cout<<"START DECODE"<<endl;
 		DecodeAndSendRawFrame(ucharValFrameVec);
-		if(_debug) cout<<" cycleID:"<<cycleID<<" sca:"<<sca<<std::endl;
+		
+		if(_debug) cout<<" cycleID:"<<cycleID<<" sca:"<<sca<<" prev:"<<previous_cycleID<<std::endl;
 		for(int ibuf=0; ibuf<datasize+10; ibuf++) {
 		  buf.pop_front();
-		 }
-		 
-		if(cycleID>previous_cycleID ) {
-		  if(previous_cycleID==-1)  deqEvent.push_back(std::move(nev));
-		    
+		}
+		if(cycleID>previous_cycleID || previous_cycleID==-1) {
+
+		  if((cycleID-previous_cycleID)>1 && previous_cycleID==-1 && cycleID>1) {
+		    for(int idummy=0; idummy<cycleID; idummy++) insertDummyEvent(deqEvent,idummy+1);
+		  }
+		  if((cycleID-previous_cycleID)>1 && previous_cycleID>-1) {
+		    for(int idummy=previous_cycleID; idummy<cycleID-1; idummy++) insertDummyEvent(deqEvent,idummy+1);
+                  }
+
+		  
 		  nev = eudaq::Event::MakeUnique("CaliceObject");
 		  nev_raw = dynamic_cast<RawEvent*>(nev.get());
 		  prepareEudaqRawPacket(nev_raw);
@@ -388,10 +414,12 @@ namespace eudaq {
 		    cycledata.push_back((uint32_t) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
 		  }
 		  nev_raw->AppendBlock(6, cycledata);
-		  if(previous_cycleID>0) deqEvent.push_back(std::move(nev));
+		  if(previous_cycleID>0) {
+		    deqEvent.push_back(std::move(nev));
+		    if(_debug) cout<<"INSERTING GOOD EVENT: "<<cycleID<<endl;
+		  }
 		  previous_cycleID=cycleID;
 		} else {
-		  		  
 		  std::vector<uint32_t> cycledata;
 		  cycledata.push_back((uint32_t) (cycleID));
 		  cycledata.push_back((uint32_t) (bcid[sca]));
@@ -414,16 +442,18 @@ namespace eudaq {
 		buf.pop_front();
 		buf.pop_front();
 	      }
-	    }
+	    } else buf.pop_front();
 	  } else {
 	    buf.pop_front();
 	  }
-	}//buf size>0
+      }//buf size>0
       //    }		// }//while1
     }  catch (BufferProcessigExceptions &e) {
       //all data in buffer processed (or not enough data in the buffer)
+      //      if(_debug) cout << "CATCH "<<e<<endl;
+      //deqEvent.push_back(std::move(nev));
+      //if(_debug) cout << "CATCH2 "<<endl;
 
-      //if(_debug) cout << "DEBUG: MAP sizes: " << _LDAAsicData.size() << "\t" << _LDATimestampData.size();
 	//if(_debug) cout << "\t last ROC: " << _LDAAsicData.rbegin()->first << "\t" << _LDATimestampData.rbegin()->first << endl;
 	//         printLDATimestampCycles(_LDATimestampData);
       /*	switch (e) {
@@ -469,7 +499,15 @@ namespace eudaq {
 	// appendOtherInfo(ev);
   }
   
-  
+  void SiReader::insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent, int ievent ){
+    nev = eudaq::Event::MakeUnique("CaliceObject");
+    nev_raw = dynamic_cast<RawEvent*>(nev.get());
+    prepareEudaqRawPacket(nev_raw);
+    nev->SetTriggerN(ievent, true);
+    deqEvent.push_back(std::move(nev));
+    if(_debug) cout<<"INSERTING DUMMY EVENT: "<<ievent<<endl;
+      
+  }
 
     /* void SiReader::colorPrint(const std::string &colorString, const std::string & msg) {
        if (_producer->getColoredTerminalMessages()) cout << colorString; //"\033[31m";
@@ -477,4 +515,4 @@ namespace eudaq {
        cout << endl;
        if (_producer->getColoredTerminalMessages()) cout << "\033[0m"; //reset the color back to normal
        }*/
-  }
+}
