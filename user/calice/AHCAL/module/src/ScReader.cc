@@ -974,10 +974,11 @@ namespace eudaq {
             EventQueue.push_back(std::move(nev));
          }
          _LDAAsicData.erase(_LDAAsicData.begin());
-	 
+         if (_LDATimestampData.count(roc)) {
+            _LDATimestampData.erase(roc);
+         }
 	 while (_LDATimestampData.begin() != _LDATimestampData.end()) {
 	   if (_LDATimestampData.begin()->first <= roc) {
-	     //               std::cout << "DEBUG: erasing timestamp ROC " << processedROC << std::endl;
 	     _LDATimestampData.erase(_LDATimestampData.begin());
 	   } else
 	     break;
@@ -1035,14 +1036,7 @@ namespace eudaq {
                cycledata.push_back((uint32_t) 0);
             }
             nev_raw->AppendBlock(6, cycledata);
-	    while (_LDATimestampData.begin() != _LDATimestampData.end()) {
-	      if (_LDATimestampData.begin()->first <= roc) {
-		//               std::cout << "DEBUG: erasing timestamp ROC " << processedROC << std::endl;
-		_LDATimestampData.erase(_LDATimestampData.begin());
-	      } else
-		break;
-	    }
-
+            _LDATimestampData.erase(roc);
          } else {
             if (!_producer->getIgnoreLdaTimestamps()) {
                if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
@@ -1053,6 +1047,13 @@ namespace eudaq {
 
          EventQueue.push_back(std::move(nev));
          _LDAAsicData.erase(_LDAAsicData.begin());
+         while (_LDATimestampData.begin() != _LDATimestampData.end()) {
+            if (_LDATimestampData.begin()->first <= roc) {
+               //               std::cout << "DEBUG: erasing timestamp ROC " << processedROC << std::endl;
+               _LDATimestampData.erase(_LDATimestampData.begin());
+            } else
+               break;
+         }
       }
    }
 
