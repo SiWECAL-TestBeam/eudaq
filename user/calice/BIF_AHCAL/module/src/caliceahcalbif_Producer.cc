@@ -4,6 +4,7 @@
 #include "eudaq/Utils.hh"
 #include "eudaq/OptionParser.hh"
 #include "tlu/caliceahcalbifController.hh"
+#include <climits>
 #include <iostream>
 #include <ostream>
 #include <vector>
