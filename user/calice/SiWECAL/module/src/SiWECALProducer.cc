@@ -64,6 +64,7 @@ void SiWECALProducer::DoConfigure() {
     // port
    _port = param.Get("Port", 8008);
    _ipAddress = param.Get("IPAddress", "192.168.0.66");
+   _redirectedInputFileName = param.Get("RedirectInputFromFile", "");
 
    //   string reader = param.Get("Reader", "");
    if (!_reader) {
@@ -153,52 +154,85 @@ bool SiWECALProducer::OpenConnection() {
   std::cout << " OPEN CONNECTION " << std::endl;
 
 #ifdef _WIN32
-  WSADATA wsaData;
-  int wsaRet=WSAStartup(MAKEWORD(2, 2), &wsaData); //initialize winsocks 2.2
-  if (wsaRet) {cout << "ERROR: WSA init failed with code " << wsaRet << endl; return false;}
-  cout << "DEBUG: WSAinit OK" << endl;
-  
-  std::unique_lock<std::mutex> myLock(_mufd);
-  _fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (_fd == INVALID_SOCKET) {
-    cout << "ERROR: invalid socket" << endl;
-    WSACleanup;
-    return false;
-  }
-  cout << "DEBUG: Socket OK" << endl;
-  
-  struct sockaddr_in dstAddr; //win ok
-  //??		memset(&dstAddr, 0, sizeof(dstAddr));
-  dstAddr.sin_family = AF_INET;
-  dstAddr.sin_port = htons(_port);
-  dstAddr.sin_addr.s_addr = inet_addr(_ipAddress.c_str());
-  
-  int ret = connect(_fd, (struct sockaddr *) &dstAddr, sizeof(dstAddr));
-  if (ret != 0) {
-    cout << "DEBUG: Connect failed" << endl;
-    return 0;
-  }
-  cout << "DEBUG: Connect OK" << endl;
-  return 1;
+  if (_redirectedInputFileName.empty()) {
+     WSADATA wsaData;
+     int wsaRet=WSAStartup(MAKEWORD(2, 2), &wsaData); //initialize winsocks 2.2
+     if (wsaRet) {cout << "ERROR: WSA init failed with code " << wsaRet << endl; return false;}
+     cout << "DEBUG: WSAinit OK" << endl;
+
+     std::unique_lock<std::mutex> myLock(_mufd);
+     _fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+     if (_fd == INVALID_SOCKET) {
+       cout << "ERROR: invalid socket" << endl;
+       WSACleanup;
+       return false;
+     }
+     cout << "DEBUG: Socket OK" << endl;
+
+     struct sockaddr_in dstAddr; //win ok
+     //??		memset(&dstAddr, 0, sizeof(dstAddr));
+     dstAddr.sin_family = AF_INET;
+     dstAddr.sin_port = htons(_port);
+     dstAddr.sin_addr.s_addr = inet_addr(_ipAddress.c_str());
+
+     int ret = connect(_fd, (struct sockaddr *) &dstAddr, sizeof(dstAddr));
+     if (ret != 0) {
+       cout << "DEBUG: Connect failed" << endl;
+       return 0;
+     }
+     cout << "DEBUG: Connect OK" << endl;
+     return 1;
+  } else {
+     std::cout << "Redirecting intput from file: " << _redirectedInputFileName << std::endl;
+       _redirectedInputFstream = std::ifstream(_redirectedInputFileName.c_str(),ios::in|ios::binary);
+       //_fd = open(_redirectedInputFileName.c_str(), O_RDONLY);
+       if (_redirectedInputFstream) {
+          _redirectedInputFstream.seekg(0, _redirectedInputFstream.end);
+          int length = _redirectedInputFstream.tellg();
+          _redirectedInputFstream.seekg(0, _redirectedInputFstream.beg);
+          std::cout << "Redirected file is " << length << " bytes long" << std::endl;
+          return true;
+       } else {
+          cout << "open redirected file failed from this path:" << _redirectedInputFileName << endl;
+          return false;
+       }
+    }
 #else
-  struct sockaddr_in dstAddr;
-  memset(&dstAddr, 0, sizeof(dstAddr));
-  dstAddr.sin_port = htons(_port);
-  dstAddr.sin_family = AF_INET;
-  dstAddr.sin_addr.s_addr = inet_addr(_ipAddress.c_str());
-  std::unique_lock<std::mutex> myLock(_mufd);
-  _fd = socket(AF_INET, SOCK_STREAM, 0);
-  int ret = connect(_fd, (struct sockaddr *) &dstAddr, sizeof(dstAddr));
-  if (ret != 0) return 0;
-  return 1;
-  
-   #endif //_WIN32
+   if (_redirectedInputFileName.empty()) {
+      struct sockaddr_in dstAddr;
+      memset(&dstAddr, 0, sizeof(dstAddr));
+      dstAddr.sin_port = htons(_port);
+      dstAddr.sin_family = AF_INET;
+      dstAddr.sin_addr.s_addr = inet_addr(_ipAddress.c_str());
+      std::unique_lock<std::mutex> myLock(_mufd);
+      _fd = socket(AF_INET, SOCK_STREAM, 0);
+      int ret = connect(_fd, (struct sockaddr*) &dstAddr, sizeof(dstAddr));
+      if (ret != 0) return 0;
+      return 1;
+   } else {
+      std::cout << "Redirecting intput from file: " << _redirectedInputFileName << std::endl;
+      std::cout << "Waiting " << _waitmsFile << " ms ...";
+      eudaq::mSleep(_waitmsFile);
+      std::cout << "Finished";
+      _fd = open(_redirectedInputFileName.c_str(), O_RDONLY);
+      if (_fd < 0) {
+         cout << "open redirected file failed from this path:" << _redirectedInputFileName << endl;
+         return false;
+      }
+      return true;
+   }
+
+#endif //_WIN32
 }
 
 void SiWECALProducer::CloseConnection() {
    std::unique_lock<std::mutex> myLock(_mufd);
 #ifdef _WIN32
-   closesocket(_fd);
+   if (_redirectedInputFileName.empty()) {
+      closesocket(_fd);
+   } else {
+      _redirectedInputFstream.close();
+   }
    WSACleanup;
 #else
    close(_fd);
@@ -211,19 +245,28 @@ void SiWECALProducer::SendCommand(const char *command, int size) {
    cout << "DEBUG: in SiWECALProducer::SendCommand(const char *command, int size)" << endl;
    if (size == 0) size = strlen(command);
    cout << "DEBUG: size: " << size << " message:" << command << endl;
-   if (_fd <= 0) {
-     cout << "SiWECALProducer::SendCommand(): cannot send command because connection is not open." << endl;
-   }
-   cout << "DEBUG: sending command over TCP" << endl;
+   if (_redirectedInputFileName.empty()) {
+      if (_fd <= 0) {
+         cout << "SiWECALProducer::SendCommand(): cannot send command because connection is not open." << endl;
+      }
+      cout << "DEBUG: sending command over TCP" << endl;
 #ifdef _WIN32
-   size_t bytesWritten = send(_fd, command, size, 0);
+      size_t bytesWritten = send(_fd, command, size, 0);
 #else
-   size_t bytesWritten = write(_fd, command, size);
+      size_t bytesWritten = write(_fd, command, size);
 #endif
-   if (bytesWritten < 0) {
-     cout << "There was an error writing to the TCP socket" << endl;
+      if (bytesWritten < 0) {
+         cout << "There was an error writing to the TCP socket" << endl;
+      } else {
+         cout << bytesWritten << " out of " << size << " bytes is  written to the TCP socket" << endl;
+      }
    } else {
-     cout << bytesWritten << " out of " << size << " bytes is  written to the TCP socket" << endl;
+      std::cout << "input overriden from file. No command is send." << std::endl;
+      std::cout << "sending " << size << " bytes:";
+      for (int i = 0; i < size; ++i) {
+         std::cout << " " << to_hex(command[i], 2);
+      }
+      std::cout << std::endl;
    }
    
 }
@@ -273,14 +316,18 @@ void SiWECALProducer::RunLoop() {
       // wait until configured and connected
       std::unique_lock<std::mutex> myLock(_mufd);
       int size = 0;
-      if ((_fd <= 0) ){
+      if ((_fd <= 0) && _redirectedInputFileName.empty()) {
          myLock.unlock();
          std::this_thread::sleep_for(std::chrono::milliseconds(100));
          continue;
       }
-      if ((!_running) ) break; //stop came during read of a file. In this case exit before reaching the end of the file.
+      if ((!_running) && (!_redirectedInputFileName.empty())) break; //stop came during read of a file. In this case exit before reaching the end of the file.
 #ifdef _WIN32
-      size = recv(_fd, buf, bufsize, 0);      
+      if (_redirectedInputFileName.empty()) {
+         size = recv(_fd, buf, bufsize, 0);
+      } else {
+         size = _redirectedInputFstream.read(buf, bufsize).gcount();
+      }
 #else
       size = ::read(_fd, buf, bufsize);   //blocking. Get released when the connection is closed from Labview
 #endif // _WIN32
@@ -338,7 +385,10 @@ void SiWECALProducer::RunLoop() {
    close(_fd);
 #endif
    _fd = -1;
-   
+   if (!_redirectedInputFileName.empty()) { //signalling during reprocessing
+       std::this_thread::sleep_for(std::chrono::milliseconds(3000)); //extra time for the data collectors to process the events
+       SetStatusTag("ReprocessingFinished", std::to_string(1));
+    }
 }
 
 
