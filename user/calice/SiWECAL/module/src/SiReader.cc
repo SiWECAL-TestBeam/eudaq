@@ -459,21 +459,13 @@ namespace eudaq {
   void SiReader::prepareEudaqRawPacket(eudaq::RawEvent * ev) {
 	string s = "EUDAQDataSiECAL";
 	ev->AddBlock(0, s.c_str(), s.length());
-	s = "i:CycleNr,i:BunchXID,i:sca,i:Layer,i:SkirocID,i:NChannels,i:hit_low[NC],i:gain_low[NC],ADC_low[NC],i:hit_high[NC],i:gain_high[NC],ADC_high[NC]";
+	s="i:rawTSD,i:temperature,i:rawAVDD0,i:AVDDO,i:rawAVDD1,i:AVDD1";
 	ev->AddBlock(1, s.c_str(), s.length());
-	unsigned int times[1];
-	auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
-	times[0] = std::chrono::duration_cast<std::chrono::seconds>(since_epoch).count();
-	//times[0]=1526342400;            
-	ev->AddBlock(2, times, sizeof(times));
-	ev->AddBlock(3, vector<int>()); // AHCAL dummy block to be filled later with slowcontrol files   
-	ev->AddBlock(4, vector<int>()); // AHCAL  dummy block to be filled later with LED information (only if LED run)     
-	ev->AddBlock(5, vector<int>()); // AHCAL dummy block to be filled later with temperature              
-	ev->AddBlock(6, vector<uint32_t>()); // AHCAL dummy block to be filled later with cycledata(start, stop, trigger)     
-	ev->AddBlock(7, std::vector<std::pair<int, int>>()); //AHCAL to be filled with info on stopping bxid per Asic    
-	ev->AddBlock(8, vector<int>()); //AHCAL  HV adjustment info  
-	ev->AddBlock(9, vector<int>()); //AHCAL reserved for any future use       -- SiWECAL extra info  Size 1 ChipID 9 coreIdx 0 slabIdx 0 slabAdd 0 Asu 0 SkirocIndex 9 transmitID 0 cycleID 2 StartTime 56717 rawTSD 3712 rawAVDD0 2017 rawAVDD1 2023 tsdValue 36.02 avDD0 1.971 aVDD1 1.977
-	// appendOtherInfo(ev);
+	for( int iSLB=0; iSLB<SLBDEPTH; iSLB++) {
+	  ev->AddBlock(2+iSLB, vector<int>()); // SiWECAL dummy block to be filled later with slowcontrol info  rawTSD rawAVDD0 rawAVDD1 tsdValue avDD0 aVDD1
+	}
+	s = "i:CycleNr,i:BunchXID,i:sca,i:Layer,i:SkirocID,i:NChannels,i:hit_low[NC],i:gain_low[NC],ADC_low[NC],i:hit_high[NC],i:gain_high[NC],ADC_high[NC]";
+	ev->AddBlock(2+SLBDEPTH, s.c_str(), s.length());
   }
   
   void SiReader::insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent,  int rocnumber, int triggerid=-1, bool triggeridFlag=-1) {
@@ -549,7 +541,9 @@ namespace eudaq {
 
     int nframes=map_dumped_into_a_vector_element.second.size();
     if(_debug)   std::cout<<"storing cycleID:"<<map_dumped_into_a_vector_element.first<<" that has "<<nframes<<" nframes"<<endl;
-      
+
+    int slab_with_data[15]={0};
+    
     for(int jframes=0; jframes<nframes; jframes++) {
       DecodeRawFrame(map_dumped_into_a_vector_element.second.at(jframes));
 
@@ -558,9 +552,26 @@ namespace eudaq {
 	nev_raw = dynamic_cast<RawEvent*>(nev.get());
 	prepareEudaqRawPacket(nev_raw);
 	nev->SetTag("ROC", cycleID);
+	nev->SetTag("NSLBs",SLBDEPTH);
+	nev->SetTag("StartAcqTime",startAcqTimeStamp);
 	//	nev->SetTag("BXID", bcid); //only for an eventual buildBXIDnot to be used with 
       }
-            
+
+      if(slab_with_data[slabAdd]==0) {
+	std::vector<uint32_t> slowcontroldata;
+	
+	slowcontroldata.push_back(rawTSD);
+	slowcontroldata.push_back(temperature);
+	slowcontroldata.push_back(rawAVDD0);
+	slowcontroldata.push_back(AVDD0);
+	slowcontroldata.push_back(rawAVDD1);
+	slowcontroldata.push_back(AVDD1);
+
+	nev_raw->AppendBlock(2+slabAdd, slowcontroldata);//
+	slab_with_data[slabAdd]=1;
+      }
+      
+
       std::vector<uint32_t> cycledata;
       
       cycledata.push_back((uint32_t) (cycleID));

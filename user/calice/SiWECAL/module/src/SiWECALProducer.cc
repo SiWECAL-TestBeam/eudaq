@@ -65,7 +65,6 @@ void SiWECALProducer::DoConfigure() {
    _ipAddress = param.Get("IPAddress", "192.168.0.66");
    _redirectedInputFileName = param.Get("RedirectInputFromFile", "");
 
-   //   string reader = param.Get("Reader", "");
    if (!_reader) {
       SetReader(new SiReader(this));
    }
