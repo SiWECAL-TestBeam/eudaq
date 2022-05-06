@@ -48,11 +48,10 @@ void SiWECALProducer::DoTerminate() {
 void SiWECALProducer::DoConfigure() {
    const eudaq::Configuration &param = *GetConfiguration();
    std::cout << " START SiWECAL 2CONFIGURATION " << std::endl;
-   // run rype: LED run or normal run ""
+   // configuration file, empty by default"
    _fileSettings = param.Get("FileSettings", "");
 
    // file name
-   //_filename = param.Get("FileName", "");
    _waitmsFile = param.Get("WaitMillisecForFile", 100);
    _waitsecondsForQueuedEvents = param.Get("waitsecondsForQueuedEvents", 2);
 
@@ -309,10 +308,10 @@ void SiWECALProducer::RunLoop() {
 
    while (!_terminated ) {
 
-     // if (_reader) {
-     // // SetStatusTag("lastROC", std::to_string(dynamic_cast<ScReader*>(_reader)->getCycleNo()));
-     //	 // SetStatusTag("lastTrigN", std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()));
-     //}
+     if (_reader) {
+       SetStatusTag("lastROC", std::to_string(dynamic_cast<SiReader*>(_reader)->getCycleNo()));
+       //	 // SetStatusTag("lastTrigN", std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()));
+     }
       // wait until configured and connected
       std::unique_lock<std::mutex> myLock(_mufd);
       int size = 0;
@@ -361,6 +360,9 @@ void SiWECALProducer::RunLoop() {
 	      std::cout << "Socket disconnected. going to the waiting mode." << endl;
 	      break;
             }
+      std::cout << "sending the rest of the event" << std::endl;
+      _reader->DumpCycle(deqEvent, true);
+
       //_running && ! _terminated
       //  std::cout << "sending the rest of the event" << std::endl;
       if (!_stopped) {

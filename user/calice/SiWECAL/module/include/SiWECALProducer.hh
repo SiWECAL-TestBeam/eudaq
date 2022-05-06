@@ -23,7 +23,9 @@ namespace eudaq {
     }
     virtual void OnConfig(std::string _fname) {
     }
-
+    virtual void DumpCycle(std::deque<eudaq::EventUP> &deqEvent, bool dumpAll) {
+    }
+    
     SiWECALReader(SiWECALProducer *r) :
       _producer(r) {
     }

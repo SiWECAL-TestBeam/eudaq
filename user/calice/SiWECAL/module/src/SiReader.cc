@@ -31,7 +31,7 @@ namespace eudaq {
     _runNo = runNo;
     _cycleNo = -1;
     //      _tempmode = false;
-    cycleData.resize(6);
+    //    cycleData.resize(6);
     //    _LDATimestampData.clear();
     _RunTimesStatistics.clear();
 
@@ -166,7 +166,24 @@ namespace eudaq {
 
   }
 
-  void SiReader::DecodeAndSendRawFrame(std::vector<unsigned char> ucharValFrameVec) {
+  int SiReader::cycleIDDecoding(std::vector<unsigned char> ucharValFrameVec ) {
+    i=0;
+    n=0;
+    // metadata
+    int result=0;
+    for(n= 0; n < 16; n++)
+      {
+	result += ((unsigned int)(((ucharValFrameVec.at(2*n+1)& 0xC0)>> 6) << (30-2*i)));
+	i++;
+      }
+    if(_debug) std::cout<<"cycleIDDecoding:"<<dec<<result<<std::endl;
+    i=0;
+    n=0;
+    
+    return result;
+  }
+  
+  void SiReader::DecodeRawFrame(std::vector<unsigned char> ucharValFrameVec) {
 
     initRawFrame(false);
     if(_ASCIIOUT)cout<<" New DECODERAWFRAME "<<endl;
@@ -370,74 +387,33 @@ namespace eudaq {
 
 	      if(trailerWord == 0x9697) {
 
-		if(cycleID == -1 && previous_cycleID==-1 && firstdummy==false) {
-		  insertDummyEvent(deqEvent,0);
-		  firstdummy=true;
-		}
-		
-		if(_debug) cout<<"START DECODE"<<endl;
-		DecodeAndSendRawFrame(ucharValFrameVec);
-		
-		if(_debug) cout<<" cycleID:"<<cycleID<<" sca:"<<sca<<" prev:"<<previous_cycleID<<std::endl;
-		for(int ibuf=0; ibuf<datasize+10; ibuf++) {
-		  buf.pop_front();
-		}
-		if(cycleID>previous_cycleID || previous_cycleID==-1) {
-
-		  if((cycleID-previous_cycleID)>1 && previous_cycleID==-1 && cycleID>1) {
-		    for(int idummy=0; idummy<cycleID; idummy++) insertDummyEvent(deqEvent,idummy+1);
-		  }
-		  if((cycleID-previous_cycleID)>1 && previous_cycleID>-1) {
-		    for(int idummy=previous_cycleID; idummy<cycleID-1; idummy++) insertDummyEvent(deqEvent,idummy+1);
-                  }
-
-		  
-		  nev = eudaq::Event::MakeUnique("CaliceObject");
-		  nev_raw = dynamic_cast<RawEvent*>(nev.get());
-		  prepareEudaqRawPacket(nev_raw);
-		  nev->SetTriggerN(cycleID, true);
-		  
-		  std::vector<uint32_t> cycledata;
-		 
-		  cycledata.push_back((uint32_t) (cycleID));
-		  cycledata.push_back((uint32_t) (bcid[sca]));
-		  cycledata.push_back((uint32_t) (sca));
-		  cycledata.push_back((uint32_t) (slabAdd));
-		  cycledata.push_back((uint32_t) (skirocIndex));
-		  cycledata.push_back((uint32_t) (NB_OF_CHANNELS_IN_SKIROC));
-		  for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
-		    cycledata.push_back((uint32_t) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		  }
-		  nev_raw->AppendBlock(6, cycledata);
-		  if(previous_cycleID>0) {
-		    deqEvent.push_back(std::move(nev));
-		    if(_debug) cout<<"INSERTING GOOD EVENT: "<<cycleID<<endl;
-		  }
-		  previous_cycleID=cycleID;
+		int latestfoundcycle=cycleIDDecoding(ucharValFrameVec);
+		lastcycleid=latestfoundcycle;
+		if(firstcycleid==-1) firstcycleid=latestfoundcycle;
+		std::map<int, std::vector<std::vector<unsigned char>>>::iterator it;
+		it=map_of_cycles_and_frames.find(latestfoundcycle);
+		if( it == map_of_cycles_and_frames.end() ) {
+		  //new cycle
+		  std::vector<std::vector<unsigned char> > new_vector_of_frames;
+		  new_vector_of_frames.push_back(ucharValFrameVec);
+		  map_of_cycles_and_frames[latestfoundcycle]=new_vector_of_frames;
+		  vector_with_dumped_cycles.push_back(latestfoundcycle);
 		} else {
-		  std::vector<uint32_t> cycledata;
-		  cycledata.push_back((uint32_t) (cycleID));
-		  cycledata.push_back((uint32_t) (bcid[sca]));
-		  cycledata.push_back((uint32_t) (sca));
-		  cycledata.push_back((uint32_t) (slabAdd));
-		  cycledata.push_back((uint32_t) (skirocIndex));
-		  cycledata.push_back((uint32_t) (NB_OF_CHANNELS_IN_SKIROC));
-		  for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
-		    cycledata.push_back((uint32_t) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		    cycledata.push_back((uint32_t) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-		  }
-		  nev_raw->AppendBlock(6, cycledata);
+		  //existing cycle ID
+		  it->second.push_back(ucharValFrameVec);
 		}
-		// deqEvent.push_back(std::move(nev));
+		for(int ibuf=0; ibuf<datasize+10; ibuf++) {
+                  buf.pop_front();
+                }
+
+		if(map_of_cycles_and_frames.size()> _maxReadOutCycleJump) {
+
+     	  
+		  if(_debug) std::cout<<"MapSize:"<<map_of_cycles_and_frames.size()<<endl;
+		  DumpCycle(deqEvent,false);
+
+		}//dump cycle if map file is large enough
+	      
 	      }else {
 		buf.pop_front();
 		buf.pop_front();
@@ -451,6 +427,7 @@ namespace eudaq {
     }  catch (BufferProcessigExceptions &e) {
       //all data in buffer processed (or not enough data in the buffer)
       //      if(_debug) cout << "CATCH "<<e<<endl;
+      //  DumpCycle(deqEvent,true);
       //deqEvent.push_back(std::move(nev));
       //if(_debug) cout << "CATCH2 "<<endl;
 
@@ -499,20 +476,118 @@ namespace eudaq {
 	// appendOtherInfo(ev);
   }
   
-  void SiReader::insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent, int ievent ){
+  void SiReader::insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent,  int rocnumber, int triggerid=-1, bool triggeridFlag=-1) {
     nev = eudaq::Event::MakeUnique("CaliceObject");
     nev_raw = dynamic_cast<RawEvent*>(nev.get());
     prepareEudaqRawPacket(nev_raw);
-    nev->SetTriggerN(ievent, true);
+    if (rocnumber > 0) nev->SetEventN(rocnumber);//roc ?? AIQ
+    if (triggerid > 0) nev->SetTriggerN(triggerid, triggeridFlag); //bcid ?? AIQ
+    nev->SetTag("Dummy", 1);
     deqEvent.push_back(std::move(nev));
-    if(_debug) cout<<"INSERTING DUMMY EVENT: "<<ievent<<endl;
+    if(_debug) cout<<"INSERTING DUMMY EVENT: "<<rocnumber<<endl;
       
   }
 
-    /* void SiReader::colorPrint(const std::string &colorString, const std::string & msg) {
-       if (_producer->getColoredTerminalMessages()) cout << colorString; //"\033[31m";
-       cout << msg;
-       cout << endl;
-       if (_producer->getColoredTerminalMessages()) cout << "\033[0m"; //reset the color back to normal
-       }*/
+  void SiReader::DumpCycle(std::deque<eudaq::EventUP> &deqEvent, bool dumpAll){
+
+    //sorting the map
+    std::vector<pair<int, std::vector<std::vector<unsigned char> > > > map_dumped_into_a_vector;
+    copy(map_of_cycles_and_frames.begin(),
+	 map_of_cycles_and_frames.end(),
+	 back_inserter<vector<pair<int, std::vector<std::vector<unsigned char> > > > >(map_dumped_into_a_vector));
+
+    int ncycles=1;
+    if(dumpAll==true) ncycles=map_dumped_into_a_vector.size();
+    
+    for(int icycles=0; icycles<ncycles; icycles++) {
+      
+      buildEvent(map_dumped_into_a_vector[icycles],deqEvent);
+
+      cout<<"Dumping: "<<map_dumped_into_a_vector[icycles].first<<" "<<dumpAll<<endl;
+      std::map<int, std::vector<std::vector<unsigned char>>>::iterator it;
+      it=map_of_cycles_and_frames.find(map_dumped_into_a_vector[icycles].first);
+      if (it != map_of_cycles_and_frames.end())
+	map_of_cycles_and_frames.erase(it++);
+    }
+  }
+
+  void SiReader::buildEvent(pair<int, std::vector<std::vector<unsigned char> > > map_dumped_into_a_vector_element, std::deque<eudaq::EventUP> &deqEvent) {
+
+     //AHCAL stuff if (_producer->getDebugKeepBuffered()) return;
+     std::lock_guard<std::mutex> lock(_eventBuildingQueueMutex); //minimal lock for pushing new event
+     //    switch (_producer->getEventMode()) {
+     //    case SiWECALProducer::EventBuildingMode::ROC:
+     buildROCEvents(map_dumped_into_a_vector_element,deqEvent);
+     //       break;
+     /* case SiWECALProducer::EventBuildingMode::BUILD_BXID_ALL:
+	buildBXIDEvents(deqEvent, dumpAll);
+	break;
+	case SiWECALProducer::EventBuildingMode::BUILD_BXID_VALIDATED:
+	buildValidatedBXIDEvents(deqEvent, dumpAll);
+	break;
+	default:
+	break;*/
+   }
+  
+  void SiReader::buildROCEvents(pair<int, std::vector<std::vector<unsigned char> > > map_dumped_into_a_vector_element, std::deque<eudaq::EventUP> &deqEvent) {
+
+    int currentcycleID=map_dumped_into_a_vector_element.first;
+    if(_debug) cout<<" cycleID:"<<currentcycleID<<" sca:"<<sca<<" prev:"<<previous_cycleID<<std::endl;
+
+    if(currentcycleID == -1 && previous_cycleID==-1 && firstdummy==false) {
+      insertDummyEvent(deqEvent,0);
+      firstdummy=true;
+    }
+    if((currentcycleID-previous_cycleID)>1 && previous_cycleID==-1 && currentcycleID>1) {
+      for(int idummy=0; idummy<currentcycleID; idummy++) insertDummyEvent(deqEvent,idummy+1);
+    }
+    if((currentcycleID-previous_cycleID)>1 && previous_cycleID>-1) {
+      for(int idummy=previous_cycleID; idummy<currentcycleID-1; idummy++) insertDummyEvent(deqEvent,idummy+1);
+    }
+
+    //eudaq::EventUP nev;
+    //eudaq::RawEvent *nev_raw;
+
+    int nframes=map_dumped_into_a_vector_element.second.size();
+    if(_debug)   std::cout<<"storing cycleID:"<<map_dumped_into_a_vector_element.first<<" that has "<<nframes<<" nframes"<<endl;
+      
+    for(int jframes=0; jframes<nframes; jframes++) {
+      DecodeRawFrame(map_dumped_into_a_vector_element.second.at(jframes));
+
+      if(jframes==0) {
+	nev = eudaq::Event::MakeUnique("CaliceObject");
+	nev_raw = dynamic_cast<RawEvent*>(nev.get());
+	prepareEudaqRawPacket(nev_raw);
+	nev->SetTag("ROC", cycleID);
+	//	nev->SetTag("BXID", bcid); //only for an eventual buildBXIDnot to be used with 
+      }
+            
+      std::vector<uint32_t> cycledata;
+      
+      cycledata.push_back((uint32_t) (cycleID));
+      cycledata.push_back((uint32_t) (bcid[sca]));
+      cycledata.push_back((uint32_t) (sca));
+      cycledata.push_back((uint32_t) (slabAdd));
+      cycledata.push_back((uint32_t) (skirocIndex));
+      cycledata.push_back((uint32_t) (NB_OF_CHANNELS_IN_SKIROC));
+      for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
+	cycledata.push_back((uint32_t) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((uint32_t) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((uint32_t) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((uint32_t) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((uint32_t) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((uint32_t) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+      }
+      nev_raw->AddBlock(nev_raw->NumBlocks(), cycledata);//
+    }
+    
+    // if(previous_cycleID>0) {
+    deqEvent.push_back(std::move(nev));
+    if(_debug) cout<<"INSERTING GOOD EVENT: "<<cycleID<<endl;
+    //}
+    previous_cycleID=cycleID;
+    _cycleNo=cycleID;
+  }
+
 }
+
