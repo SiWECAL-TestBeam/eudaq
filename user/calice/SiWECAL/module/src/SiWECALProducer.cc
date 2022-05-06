@@ -48,11 +48,10 @@ void SiWECALProducer::DoTerminate() {
 void SiWECALProducer::DoConfigure() {
    const eudaq::Configuration &param = *GetConfiguration();
    std::cout << " START SiWECAL 2CONFIGURATION " << std::endl;
-   // run rype: LED run or normal run ""
+   // configuration file, empty by default"
    _fileSettings = param.Get("FileSettings", "");
 
    // file name
-   //_filename = param.Get("FileName", "");
    _waitmsFile = param.Get("WaitMillisecForFile", 100);
    _waitsecondsForQueuedEvents = param.Get("waitsecondsForQueuedEvents", 2);
 
@@ -134,7 +133,7 @@ void SiWECALProducer::DoStopRun() {
    std::cout << "SiWECALProducer::DoStopRun:  Stop run" << std::endl;
    _reader->OnStop(_waitsecondsForQueuedEvents);
    _running = false;
-   _stopped=true;
+   //   _stopped=true;
    std::this_thread::sleep_for(std::chrono::seconds(1));
 
    std::cout << "SiWECALProducer::OnStopRun waiting for _stopped" << std::endl;
@@ -309,10 +308,10 @@ void SiWECALProducer::RunLoop() {
 
    while (!_terminated ) {
 
-     // if (_reader) {
-     // // SetStatusTag("lastROC", std::to_string(dynamic_cast<ScReader*>(_reader)->getCycleNo()));
-     //	 // SetStatusTag("lastTrigN", std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()));
-     //}
+     if (_reader) {
+       SetStatusTag("lastROC", std::to_string(dynamic_cast<SiReader*>(_reader)->getCycleNo()));
+       //	 // SetStatusTag("lastTrigN", std::to_string(dynamic_cast<ScReader*>(_reader)->getTrigId() - getLdaTrigidOffset()));
+     }
       // wait until configured and connected
       std::unique_lock<std::mutex> myLock(_mufd);
       int size = 0;
@@ -359,8 +358,12 @@ void SiWECALProducer::RunLoop() {
          } else
             if (size == 0) {
 	      std::cout << "Socket disconnected. going to the waiting mode." << endl;
+	      std::cout << "sending the remaining events" << std::endl;
+	      _reader->DumpCycle(deqEvent, true);
+	      SetStatusTag("verylastROC", std::to_string(dynamic_cast<SiReader*>(_reader)->getCycleNo()));
 	      break;
             }
+
       //_running && ! _terminated
       //  std::cout << "sending the rest of the event" << std::endl;
       if (!_stopped) {

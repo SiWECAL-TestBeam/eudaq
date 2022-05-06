@@ -43,11 +43,22 @@ namespace eudaq {
     bool _debug=false;
     bool _ASCIIOUT=false;
     int previous_cycleID=-1;
+    int _maxReadOutCycleJump=10;
+    int lastcycleid=-1;
+    int firstcycleid=-1;
     virtual void Read(std::deque<unsigned char> & buf, std::deque<eudaq::EventUP> & deqEvent) override;
     virtual void OnStart(int runNo) override;
     virtual void OnStop(int waitQueueTimeS) override;
     virtual void OnConfig(std::string _fname) override; //chose configuration file
+    virtual void DumpCycle(std::deque<eudaq::EventUP> &deqEvent, bool dumpAll) override;
 
+    //one map of cycles per slboard
+    //why per slboard? because the slboad-add is not in the raw dataframes but in the header
+    std::map<int, std::vector<std::vector<unsigned char> > >map_of_cycles_and_frames;
+    // If one of the cycles
+    // reappears after the _maxReadOutCycleJump, then we will report it at the end of the conversion
+    std::vector<int> vector_with_dumped_cycles;
+    
     //         virtual std::deque<eudaq::RawEvent *> NewEvent_createRawDataEvent(std::deque<eudaq::RawEvent *> deqEvent, bool tempcome, int LdaRawcycle,
     //         bool newForced);
     //  virtual void readTemperature(std::deque<unsigned char>& buf);
@@ -141,11 +152,15 @@ namespace eudaq {
     };
 
   private:
-    
-    void DecodeAndSendRawFrame(std::vector<unsigned char> ucharValFrameVec);
+
+    int cycleIDDecoding(std::vector<unsigned char> ucharValFrameVec);
+    void DecodeRawFrame(std::vector<unsigned char> ucharValFrameVec);
+    void buildEvent(std::pair<int, std::vector<std::vector<unsigned char> > > map_dumped_into_a_vector_element, std::deque<eudaq::EventUP> &deqEvent); 
+    void buildROCEvents(std::pair<int, std::vector<std::vector<unsigned char> > > map_dumped_into_a_vector_element,std::deque<eudaq::EventUP> &deqEvent);
+
     void prepareEudaqRawPacket(eudaq::RawEvent * ev);
     void colorPrint(const std::string &colorString, const std::string& msg);
-    void insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent, int ievent );
+    void insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent, int ievent , int triggerid, bool triggeridFlag);
     bool firstdummy=false;
  
     UnfinishedPacketStates _unfinishedPacketState;
@@ -158,7 +173,7 @@ namespace eudaq {
     bool _buffer_inside_acquisition; //the reader is reading data from within the acquisition, defined by start and stop commands
     //uint64_t _last_stop_ts; //timestamp of the last stop of acquisition
 
-     std::vector<uint32_t> cycleData;
+    //std::vector<uint32_t> cycleData;
 
     RunTimeStatistics _RunTimesStatistics;
 
