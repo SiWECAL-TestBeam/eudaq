@@ -35,6 +35,7 @@ namespace eudaq {
     bool _debug=false;
     bool _ASCIIOUT=false;
     int previous_cycleID=-1;
+        
    virtual void setDebugMessages(bool b) {
       _debug=b;
     }
