@@ -503,7 +503,6 @@ namespace eudaq {
       
       buildEvent(map_dumped_into_a_vector[icycles],deqEvent);
 
-      cout<<"Dumping: "<<map_dumped_into_a_vector[icycles].first<<" "<<dumpAll<<endl;
       std::map<int, std::vector<std::vector<unsigned char>>>::iterator it;
       it=map_of_cycles_and_frames.find(map_dumped_into_a_vector[icycles].first);
       if (it != map_of_cycles_and_frames.end())

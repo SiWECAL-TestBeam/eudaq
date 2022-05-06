@@ -133,7 +133,7 @@ void SiWECALProducer::DoStopRun() {
    std::cout << "SiWECALProducer::DoStopRun:  Stop run" << std::endl;
    _reader->OnStop(_waitsecondsForQueuedEvents);
    _running = false;
-   _stopped=true;
+   //   _stopped=true;
    std::this_thread::sleep_for(std::chrono::seconds(1));
 
    std::cout << "SiWECALProducer::OnStopRun waiting for _stopped" << std::endl;
@@ -358,10 +358,11 @@ void SiWECALProducer::RunLoop() {
          } else
             if (size == 0) {
 	      std::cout << "Socket disconnected. going to the waiting mode." << endl;
+	      std::cout << "sending the remaining events" << std::endl;
+	      _reader->DumpCycle(deqEvent, true);
+	      SetStatusTag("verylastROC", std::to_string(dynamic_cast<SiReader*>(_reader)->getCycleNo()));
 	      break;
             }
-      std::cout << "sending the rest of the event" << std::endl;
-      _reader->DumpCycle(deqEvent, true);
 
       //_running && ! _terminated
       //  std::cout << "sending the rest of the event" << std::endl;
