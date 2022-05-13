@@ -128,6 +128,7 @@ namespace eudaq {
     if(first==true) {
       previous_cycleID=-1;
       firstdummy=false;
+      slabAdd=-1;
     }
     coreDaughterIndex=-1;
     chipId=-1;
@@ -140,7 +141,7 @@ namespace eudaq {
     index=0;
     channel=0;
     rawValue=-1;
-    slabAdd=-1;
+    //slabAdd=-1;
     trailerWord=0;
     rawTSD =-1;
     rawAVDD0=-1; rawAVDD1=-1;
@@ -369,7 +370,7 @@ namespace eudaq {
 	      if(_debug) cout<<" ---- dec:"<<std::dec<<framesize<<" "<<datasize<<endl;
 	      if(buf.size()<(datasize+10) ) throw BufferProcessigExceptions::OK_NEED_MORE_DATA;
 	      int coreDaughterIndex=buf[5];
-	      int slabAdd=buf[8];
+	      slabAdd=buf[8];
 	      int slabIdx=buf[9];
 
 	      if(_debug) cout<<coreDaughterIndex<<" "<<slabAdd<<" "<<slabIdx<<endl;
@@ -459,13 +460,20 @@ namespace eudaq {
   void SiReader::prepareEudaqRawPacket(eudaq::RawEvent * ev) {
 	string s = "EUDAQDataSiECAL";
 	ev->AddBlock(0, s.c_str(), s.length());
-	s="i:rawTSD,i:temperature,i:rawAVDD0,i:AVDDO,i:rawAVDD1,i:AVDD1";
-	ev->AddBlock(1, s.c_str(), s.length());
-	for( int iSLB=0; iSLB<SLBDEPTH; iSLB++) {
-	  ev->AddBlock(2+iSLB, vector<int>()); // SiWECAL dummy block to be filled later with slowcontrol info  rawTSD rawAVDD0 rawAVDD1 tsdValue avDD0 aVDD1
-	}
 	s = "i:CycleNr,i:BunchXID,i:sca,i:Layer,i:SkirocID,i:NChannels,i:hit_low[NC],i:gain_low[NC],ADC_low[NC],i:hit_high[NC],i:gain_high[NC],ADC_high[NC]";
-	ev->AddBlock(2+SLBDEPTH, s.c_str(), s.length());
+	ev->AddBlock(1, s.c_str(), s.length());
+	unsigned int times[1];
+	auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
+	times[0] = std::chrono::duration_cast<std::chrono::seconds>(since_epoch).count();
+	//times[0]=1526342400;
+	ev->AddBlock(2, times, sizeof(times));
+
+	s="i:rawTSD,i:temperature,i:rawAVDD0,i:AVDDO,i:rawAVDD1,i:AVDD1";
+	ev->AddBlock(3, s.c_str(), s.length());
+	for( int iSLB=0; iSLB<SLBDEPTH; iSLB++) {
+	  ev->AddBlock(4+iSLB, vector<int>()); // SiWECAL dummy block to be filled later with slowcontrol info  rawTSD rawAVDD0 rawAVDD1 tsdValue avDD0 aVDD1
+	}
+
   }
   
   void SiReader::insertDummyEvent( std::deque<eudaq::EventUP> & deqEvent,  int rocnumber, int triggerid=-1, bool triggeridFlag=-1) {
@@ -542,7 +550,7 @@ namespace eudaq {
     int nframes=map_dumped_into_a_vector_element.second.size();
     if(_debug)   std::cout<<"storing cycleID:"<<map_dumped_into_a_vector_element.first<<" that has "<<nframes<<" nframes"<<endl;
 
-    int slab_with_data[15]={0};
+    int slab_with_data[100]={0};
     
     for(int jframes=0; jframes<nframes; jframes++) {
       DecodeRawFrame(map_dumped_into_a_vector_element.second.at(jframes));
@@ -558,7 +566,7 @@ namespace eudaq {
       }
 
       if(slab_with_data[slabAdd]==0) {
-	std::vector<uint32_t> slowcontroldata;
+	std::vector<int> slowcontroldata;
 	
 	slowcontroldata.push_back(rawTSD);
 	slowcontroldata.push_back(temperature);
@@ -567,26 +575,27 @@ namespace eudaq {
 	slowcontroldata.push_back(rawAVDD1);
 	slowcontroldata.push_back(AVDD1);
 
-	nev_raw->AppendBlock(2+slabAdd, slowcontroldata);//
+	nev_raw->AppendBlock(4+slabAdd, slowcontroldata);//
 	slab_with_data[slabAdd]=1;
+	//	cout<<"cycleID" <<cycleID<<" "<<rawTSD<<" "<<AVDD1<<endl;
       }
-      
+      //      cout<<"slabAdd:"<<slabAdd<<endl;
 
-      std::vector<uint32_t> cycledata;
+      std::vector<int> cycledata;
       
-      cycledata.push_back((uint32_t) (cycleID));
-      cycledata.push_back((uint32_t) (bcid[sca]));
-      cycledata.push_back((uint32_t) (sca));
-      cycledata.push_back((uint32_t) (slabAdd));
-      cycledata.push_back((uint32_t) (skirocIndex));
-      cycledata.push_back((uint32_t) (NB_OF_CHANNELS_IN_SKIROC));
+      cycledata.push_back((int) (cycleID));
+      cycledata.push_back((int) (bcid[sca]));
+      cycledata.push_back((int) (sca));
+      cycledata.push_back((int) (slabAdd));
+      cycledata.push_back((int) (skirocIndex));
+      cycledata.push_back((int) (NB_OF_CHANNELS_IN_SKIROC));
       for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
-	cycledata.push_back((uint32_t) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((uint32_t) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((uint32_t) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((uint32_t) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((uint32_t) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((uint32_t) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	cycledata.push_back((int) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
       }
       nev_raw->AddBlock(nev_raw->NumBlocks(), cycledata);//
     }

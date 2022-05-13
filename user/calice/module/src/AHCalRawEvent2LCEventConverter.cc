@@ -116,30 +116,30 @@ namespace eudaq {
 
       if (rawev->NumBlocks() > 2) {
 
-         // check if the data is okay (checked at the producer level)
-         int DAQquality = rawev->GetTag("DAQquality", eudaqErrorStatus ? 0 : 1);
+	// // check if the data is okay (checked at the producer level)
+	int DAQquality = rawev->GetTag("DAQquality", eudaqErrorStatus ? 0 : 1);
 
-         // first two blocks should be string, 3rd is time
-         auto bl0 = rawev->GetBlock(nblock++);
-         string colName((char *) &bl0.front(), bl0.size());
-
-         auto bl1 = rawev->GetBlock(nblock++);
-         string dataDesc((char *) &bl1.front(), bl1.size());
-
-         // EUDAQ TIMESTAMP, saved in ScReader.cc
-         auto bl2 = rawev->GetBlock(nblock++);
-         time_t timestamp = *(unsigned int *) (&bl2[0]);
-         if (tbTimestamp > 0) timestamp = shiftedUnixTS; //override of time in reprocessing
-         //std::cout<<timestamp<<std::endl;
-         //std::cout<<"colName: "<<colName<<", DataDesc: "<<dataDesc<<std::endl;
-
-         //	IMPL::LCEventImpl  & lcevent = dynamic_cast<IMPL::LCEventImpl&>(result);
-         //	lcevent.setTimeStamp((long int)&bl2[0]);
-
-         if (colName == "EudaqDataHodoscope") {
-//         auto bl3 = rawev->GetBlock(nblock++);
-//         if (bl3.size() > 0) cout << "Error, block 3 is filled in the BIF raw data" << endl;
-            LCCollectionVec *col = 0;
+	  // first two blocks should be string, 3rd is time
+	  auto bl0 = rawev->GetBlock(nblock++);
+	  string colName((char *) &bl0.front(), bl0.size());
+	  
+	  auto bl1 = rawev->GetBlock(nblock++);
+	  string dataDesc;((char *) &bl1.front(), bl1.size());
+	  
+	  // EUDAQ TIMESTAMP, saved in ScReader.cc
+	  auto bl2 = rawev->GetBlock(nblock++);
+	  time_t timestamp = *(unsigned int *) (&bl2[0]);
+	  if (tbTimestamp > 0) timestamp = shiftedUnixTS; //override of time in reprocessing
+	  //std::cout<<timestamp<<std::endl;
+	  //std::cout<<"colName: "<<colName<<", DataDesc: "<<dataDesc<<std::endl;
+	  
+	  //	IMPL::LCEventImpl  & lcevent = dynamic_cast<IMPL::LCEventImpl&>(result);
+	//	lcevent.setTimeStamp((long int)&bl2[0]);
+	
+	if (colName == "EudaqDataHodoscope") {
+	  //         auto bl3 = rawev->GetBlock(nblock++);
+	  //         if (bl3.size() > 0) cout << "Error, block 3 is filled in the BIF raw data" << endl;
+	  LCCollectionVec *col = 0;
             //for individual collection per hodoscope:
             string colName = rawev->GetTag("SRC", string("UnidentifiedHodoscope"));
             col = createCollectionVec(result, colName, dataDesc, timestamp, DAQquality);
@@ -229,7 +229,38 @@ namespace eudaq {
             col = createCollectionVec(result, colName, dataDesc, timestamp, DAQquality);
             getDataLCIOGenericObject(rawev, col, nblock);
          }
+
+	 
+         if (colName == "EUDAQDataSiECAL") {
+
+	   int numberSLboards = rawev->GetTag("NSLBs",0);
+	   result.parameters().setValue("SiECAL_numberSLboards",numberSLboards);
+ 
+	   auto startacq = rawev->GetTag("SiECAL_StartAcqTime",0);
+	   result.parameters().setValue("SiECAL_StartAcqTime", startacq);
+
+	   int ROC = rawev->GetTag("ROC",-1);
+	   result.parameters().setValue("SiECAL_CycleID", ROC);
+
+            //-------------------
+            // READ/WRITE SlowControl data
+	   //string with the info
+	   auto si_bl0 = rawev->GetBlock(nblock++);
+	   string dataDesc_sc_si((char *) &si_bl0.front(), si_bl0.size());
+	   LCCollectionVec *col_slowcontrol_si = 0;
+	   col_slowcontrol_si = createCollectionVec(result, "SiECALSlowControl", dataDesc_sc_si, timestamp, DAQquality);
+	   getDataLCIOGenericObject(rawev,col_slowcontrol_si , nblock,nblock+numberSLboards);
+
+	   //-------------------
+	   // READ/WRITE DATA
+	   //string with the info
+	   LCCollectionVec *col_data_si = 0;
+	   col_data_si = createCollectionVec(result, colName, dataDesc, timestamp, DAQquality);
+	   getDataLCIOGenericObject(rawev, col_data_si, nblock+numberSLboards);
+	   	   
+	 }
       }
+      
 
       return true;
 
@@ -336,6 +367,8 @@ namespace eudaq {
       v.resize(bl.size() / sizeof(int));
       memcpy(&v[0], &bl[0], bl.size());
 
+      for(int i=0; i<v.size(); i++) cout<<i<<" "<<v.at(i)<<endl;
+
       CaliceLCGenericObject *obj = new CaliceLCGenericObject;
       obj->setIntDataInt(v);
       try {
@@ -355,6 +388,7 @@ namespace eudaq {
 
          vector<int> v;
          auto bl = rawev->GetBlock(nblock++);
+	 if(bl.size()==0) continue;
          v.resize(bl.size() / sizeof(int));
          memcpy(&v[0], &bl[0], bl.size());
 
