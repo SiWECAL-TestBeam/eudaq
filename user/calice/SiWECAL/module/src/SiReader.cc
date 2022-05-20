@@ -130,10 +130,10 @@ namespace eudaq {
       firstdummy=false;
       slabAdd=-1;
     }
-    coreDaughterIndex=-1;
+    //coreDaughterIndex=-1;
     chipId=-1;
     asuIndex=-1; 
-    slabIndex=-1;
+    //slabIndex=-1;
     skirocIndex=-1;
     nbOfSingleSkirocEventsInFrame=0;
     frame=0; n=0 ; i=0;
@@ -152,7 +152,6 @@ namespace eudaq {
     AVDD0 = 0.0; // in Volts
     AVDD1 = 0.0; // in Volts
     sca=-1;
-    core=-1; slab=-1;
     for(int j=0; j<SINGLE_SKIROC_EVENT_SIZE; j++) {
       bcid[j]=0;
       for(int i=0; i<2; i++) {
@@ -167,14 +166,16 @@ namespace eudaq {
 
   }
 
+  
   int SiReader::cycleIDDecoding(std::vector<unsigned char> ucharValFrameVec ) {
+
     i=0;
     n=0;
     // metadata
     int result=0;
     for(n= 0; n < 16; n++)
       {
-	result += ((unsigned int)(((ucharValFrameVec.at(2*n+1)& 0xC0)>> 6) << (30-2*i)));
+	result += ((unsigned int)(((ucharValFrameVec.at(2*n+1+2)& 0xC0)>> 6) << (30-2*i)));
 	i++;
       }
     if(_debug) std::cout<<"cycleIDDecoding:"<<dec<<result<<std::endl;
@@ -187,9 +188,18 @@ namespace eudaq {
   void SiReader::DecodeRawFrame(std::vector<unsigned char> ucharValFrameVec) {
 
     initRawFrame(false);
+
+    coreDaughterIndex=0;//buf[5];// hard coded!!1 where is the coreDaughter Index information ?? IMPORTANT to be checked
+    slabAdd=ucharValFrameVec.at(0);
+    slabIndex=ucharValFrameVec.at(1);
+    ucharValFrameVec.erase (ucharValFrameVec.begin());
+    ucharValFrameVec.erase (ucharValFrameVec.begin());
+
+    datasize=ucharValFrameVec.size();
+    
     if(_ASCIIOUT)cout<<" New DECODERAWFRAME "<<endl;
     chipId = ucharValFrameVec.at(datasize -2-2);
-    if(_debug) std::cout<<"chipId:"<<dec<<chipId<<std::endl;
+    if(_debug)  std::cout<<"chipId:"<<dec<<chipId<<std::endl;
     if(_debug) std::cout<<"AsuIndex:"<<dec<<(int)(chipId/NB_OF_SKIROCS_PER_ASU)<<std::endl;
     asuIndex = (int)(chipId/NB_OF_SKIROCS_PER_ASU);
     if(_debug) std::cout<<"SkirocIndex:"<<dec<<chipId - asuIndex*NB_OF_SKIROCS_PER_ASU<<std::endl;
@@ -282,16 +292,7 @@ namespace eudaq {
       rawValue = (int)ucharValFrameVec.at(datasize -2*(n+1)-2-2) + ((int)(ucharValFrameVec.at(datasize -1 -2*(n+1)-2) & 0x0F)<<8) ;   
       int sca_ascii = nbOfSingleSkirocEventsInFrame-n-1;
       sca=nbOfSingleSkirocEventsInFrame-(sca_ascii+1);
-      if(coreDaughterIndex == -1)
-	core = 0;
-      else
-	core = coreDaughterIndex;
-		
-      if(slabIndex == -1)
-	slab = 0;
-      else
-	slab = slabIndex;
-
+  
       bcid[sca]=Convert_FromGrayToBinary(rawValue , 12);
       if(_debug) std::cout<<"sca:"<<sca<<" sca_ascii:"<<sca_ascii<<" bcid:"<<bcid[sca]<<std::endl;
 
@@ -332,12 +333,12 @@ namespace eudaq {
 	  " Asu "<<asuIndex<<" SkirocIndex "<<skirocIndex<<" transmitID "<<transmitID<<" cycleID "<<cycleID<<" StartTime "<<startAcqTimeStamp<<
 	  " rawTSD "<<rawTSD<<" rawAVDD0 "<<rawAVDD0<<" rawAVDD1 "<<rawAVDD1<<" tsdValue "<<temperature<<
 	  " avDD0 "<<AVDD0<<" aVDD1 "<<AVDD1<<endl;
-	//##0 BCID 53 SCA 0 #Hits 1
-	//Ch 0 LG 282 0 0 HG 296 0 0
+	////##0 BCID 53 SCA 0 #Hits 1
+	////Ch 0 LG 282 0 0 HG 296 0 0
 	std::cout<<"##"<<nbOfSingleSkirocEventsInFrame-sca_ascii-1<<" BCID "<<bcid[sca]<<" SCA "<<sca_ascii<<" #Hits "<<nhits[sca]<<std::endl;
 	for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) 
 	  std::cout<<"Ch "<<channel<<" LG "<< chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]<<" "<<hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]<<" "<<gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]<<" HG "<< chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]<<" "<<hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]<<" "<<gainvalue[1][sca][channel-1]<<std::endl;
-	  }
+      }
       skirocEventNumber++;
     }
   
@@ -368,25 +369,29 @@ namespace eudaq {
 	      unsigned short framesize =   ((unsigned short)b << 8) + a;
 	      datasize=int(framesize);
 	      if(_debug) cout<<" ---- dec:"<<std::dec<<framesize<<" "<<datasize<<endl;
-	      if(buf.size()<(datasize+10) ) throw BufferProcessigExceptions::OK_NEED_MORE_DATA;
-	      int coreDaughterIndex=buf[5];
-	      slabAdd=buf[8];
-	      int slabIdx=buf[9];
-
-	      if(_debug) cout<<coreDaughterIndex<<" "<<slabAdd<<" "<<slabIdx<<endl;
-
-
-	      std::vector<unsigned char> ucharValFrameVec;
-	      for(int ibuf=10; ibuf<datasize+10; ibuf++) {
-		ucharValFrameVec.push_back(buf[ibuf]);
-		if(_debug) cout<<datasize<<" LOOP, ibuf="<<ibuf<<" hex:"<<hex<<buf[ibuf]<<"  dec:"<<dec<<buf[ibuf]<<std::endl;
+	      
+	      if(buf.size()<(datasize+10) ) {
+		throw BufferProcessigExceptions::OK_NEED_MORE_DATA;
 	      }
+	      coreDaughterIndex=0;//buf[5];
+	      slabAdd=buf[8];
+	      slabIndex=buf[9];
+
+	      //if(_debug)
+	      //cout<<"---"<<coreDaughterIndex<<" "<<slabAdd<<" "<<slabIndex<<endl;
 	     
 	      
-	      unsigned short trailerWord =   ((unsigned short)ucharValFrameVec.at(datasize -1) << 8) + ucharValFrameVec.at(datasize -2);
+	      unsigned short trailerWord =   ((unsigned short)buf[8+datasize+2 -1] << 8) + buf[8+datasize+2 -2];
 	      if(_debug) cout<<"Trailer Word hex:"<<hex<<trailerWord<<" dec:"<<dec<<trailerWord<<std::endl;
 
 	      if(trailerWord == 0x9697) {
+
+		std::vector<unsigned char> ucharValFrameVec;
+		for(int ibuf=8; ibuf<datasize+10; ibuf++) {
+		  ucharValFrameVec.push_back(buf[ibuf]);
+		  if(_debug) cout<<datasize<<" LOOP, ibuf="<<ibuf<<" hex:"<<hex<<buf[ibuf]<<"  dec:"<<dec<<buf[ibuf]<<std::endl;
+		}
+		//cout<<ucharValFrameVec.size()<<endl;
 
 		int latestfoundcycle=cycleIDDecoding(ucharValFrameVec);
 		lastcycleid=latestfoundcycle;
@@ -406,7 +411,7 @@ namespace eudaq {
 		for(int ibuf=0; ibuf<datasize+10; ibuf++) {
                   buf.pop_front();
                 }
-
+	      
 		if(map_of_cycles_and_frames.size()> _maxReadOutCycleJump) {
 
      	  
@@ -553,6 +558,11 @@ namespace eudaq {
     int slab_with_data[100]={0};
     
     for(int jframes=0; jframes<nframes; jframes++) {
+      /*  if( map_dumped_into_a_vector_element.second.at(jframes).size()<datasize) {
+	cout<<" ERROR ? size of the frame:"<<map_dumped_into_a_vector_element.second.at(jframes).size()<<" is smaller than the datasize "<<datasize<<endl;
+	std::cout<<jframes<<" storing cycleID:"<<map_dumped_into_a_vector_element.first<<" that has "<<nframes<<" nframes"<<endl;
+	//	continue;
+	}*/
       DecodeRawFrame(map_dumped_into_a_vector_element.second.at(jframes));
 
       if(jframes==0) {

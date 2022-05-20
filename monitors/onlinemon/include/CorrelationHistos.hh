@@ -23,11 +23,14 @@ protected:
   std::string _sensor2;
   int _id1;
   int _id2;
+  int _maxB1;
   int _maxX1;
   int _maxX2;
   int _maxY1;
   int _maxY2;
   int _fills;
+  TH1I *_1dcorrX;
+  TH1I *_1dcorrY;
   TH2I *_2dcorrX;
   TH2I *_2dcorrY;
   TH2I *_2dcorrTimeX;
@@ -52,6 +55,8 @@ public:
   
   void Reset();
 
+  TH1I *getDiffXHisto();
+  TH1I *getDiffYHisto();
   TH2I *getCorrXHisto();
   TH2I *getCorrYHisto();
   TH2I *getCorrTimeXHisto(){return _2dcorrTimeX;};
