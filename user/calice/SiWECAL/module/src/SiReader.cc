@@ -591,23 +591,25 @@ namespace eudaq {
       }
       //      cout<<"slabAdd:"<<slabAdd<<endl;
 
-      std::vector<int> cycledata;
-      
-      cycledata.push_back((int) (cycleID));
-      cycledata.push_back((int) (bcid[sca]));
-      cycledata.push_back((int) (sca));
-      cycledata.push_back((int) (slabAdd));
-      cycledata.push_back((int) (skirocIndex));
-      cycledata.push_back((int) (NB_OF_CHANNELS_IN_SKIROC));
-      for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
-	cycledata.push_back((int) (chargevalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((int) (hitvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((int) (gainvalue[0][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((int) (chargevalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((int) (hitvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
-	cycledata.push_back((int) (gainvalue[1][sca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+      for(int isca=0; isca<sca; isca++) {
+	std::vector<int> cycledata;
+	cycledata.push_back((int) (cycleID));
+	cycledata.push_back((int) (bcid[isca]));
+	cycledata.push_back((int) (isca));
+	cycledata.push_back((int) (slabAdd));
+	cycledata.push_back((int) (skirocIndex));
+	cycledata.push_back((int) (NB_OF_CHANNELS_IN_SKIROC));
+	for(channel = 0; channel < NB_OF_CHANNELS_IN_SKIROC; channel++) {
+	  cycledata.push_back((int) (chargevalue[0][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	  cycledata.push_back((int) (hitvalue[0][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	  cycledata.push_back((int) (gainvalue[0][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	  cycledata.push_back((int) (chargevalue[1][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	  cycledata.push_back((int) (hitvalue[1][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	  cycledata.push_back((int) (gainvalue[1][isca][NB_OF_CHANNELS_IN_SKIROC-channel-1]));
+	}
+	nev_raw->AddBlock(nev_raw->NumBlocks(), cycledata);//
       }
-      nev_raw->AddBlock(nev_raw->NumBlocks(), cycledata);//
+      
     }
     
     // if(previous_cycleID>0) {
