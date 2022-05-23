@@ -53,7 +53,44 @@ CorrelationHistos::CorrelationHistos(SimpleStandardPlane p1,
       _2dcorrY->GetXaxis()->SetTitleOffset(1);
     }
   }
-  
+  //1D
+  // if (_maxB1 != -1) {
+    sprintf(out, "Diff X %s %i - %s %i", _sensor1.c_str(), _id1,
+            _sensor2.c_str(), _id2);
+    sprintf(out2, "h_difX_%s_%i_vs_%s_%i", _sensor1.c_str(), _id1,
+            _sensor2.c_str(), _id2);
+    sprintf(out_x, "X %s %i - X %s %i", _sensor1.c_str(), _id1, _sensor2.c_str(), _id2);
+    _1dcorrX = new TH1I(out2, out, 201, -100.5, 100.5);
+    if (_1dcorrX != NULL) {
+      _1dcorrX->GetXaxis()->SetTitle(out_x);
+      _1dcorrX->GetXaxis()->SetLabelSize(static_cast<Float_t>(0.03));
+      _1dcorrX->GetXaxis()->SetTitleSize(static_cast<Float_t>(0.03));
+      _1dcorrX->GetXaxis()->SetTitleOffset(1);
+      _1dcorrX->GetYaxis()->SetTitle(out_y);
+      _1dcorrX->GetYaxis()->SetTitleSize(static_cast<Float_t>(0.03));
+      _1dcorrX->GetXaxis()->SetLabelSize(static_cast<Float_t>(0.03));
+      _1dcorrX->GetXaxis()->SetTitleOffset(1);
+    }
+    //  }
+
+    sprintf(out, "Diff Y %s %i - %s %i", _sensor1.c_str(), _id1,
+            _sensor2.c_str(), _id2);
+    sprintf(out2, "h_difY_%s_%i_vs_%s_%i", _sensor1.c_str(), _id1,
+            _sensor2.c_str(), _id2);
+    sprintf(out_x, "Y %s %i - Y %s %i", _sensor1.c_str(), _id1, _sensor2.c_str(), _id2);
+    _1dcorrY = new TH1I(out2, out, 201, -100.5, 100.5);
+    if (_1dcorrY != NULL) {
+      _1dcorrY->GetXaxis()->SetTitle(out_x);
+      _1dcorrY->GetXaxis()->SetLabelSize(static_cast<Float_t>(0.03));
+      _1dcorrY->GetXaxis()->SetTitleSize(static_cast<Float_t>(0.03));
+      _1dcorrY->GetXaxis()->SetTitleOffset(1);
+      _1dcorrY->GetYaxis()->SetTitle(out_y);
+      _1dcorrY->GetYaxis()->SetTitleSize(static_cast<Float_t>(0.03));
+      _1dcorrY->GetXaxis()->SetLabelSize(static_cast<Float_t>(0.03));
+      _1dcorrY->GetXaxis()->SetTitleOffset(1);
+    }
+    //  }
+    
   m_pitchX1=1;
   m_pitchY1=1;
   m_pitchX2=1;
@@ -121,7 +158,12 @@ void CorrelationHistos::Fill(const SimpleStandardCluster &cluster1,
   if (_2dcorrY != NULL){
     _2dcorrY->Fill(cluster1.getY(), cluster2.getY());
   }
-
+   if (_1dcorrX != NULL){
+    _1dcorrX->Fill(cluster1.getX()-cluster2.getX());
+  }
+   if (_1dcorrY != NULL){
+     _1dcorrY->Fill(cluster1.getY()-cluster2.getY());
+  }
 }
 
 
@@ -145,12 +187,18 @@ void CorrelationHistos::Reset() {
   _2dcorrY->Reset();
   _2dcorrTimeX->Reset();
   _2dcorrTimeY->Reset();
+  _1dcorrX->Reset();
+  _1dcorrY->Reset();
 }
 
+TH1I *CorrelationHistos::getDiffXHisto() { return _1dcorrX; }
+TH1I *CorrelationHistos::getDiffYHisto() { return _1dcorrY; }
 TH2I *CorrelationHistos::getCorrXHisto() { return _2dcorrX; }
 TH2I *CorrelationHistos::getCorrYHisto() { return _2dcorrY; }
 
 void CorrelationHistos::Write() {
+  _1dcorrX->Write();
+  _1dcorrY->Write();
   _2dcorrX->Write();
   _2dcorrY->Write();
   _2dcorrTimeX->Write();

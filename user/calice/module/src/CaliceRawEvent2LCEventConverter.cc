@@ -8,7 +8,7 @@ namespace eudaq {
    using namespace std;
    using namespace lcio;
 
-   class AHCalRawEvent2LCEventConverter: public LCEventConverter {
+   class CaliceRawEvent2LCEventConverter: public LCEventConverter {
       public:
          bool Converting(EventSPC d1, LCEventSP d2, ConfigurationSPC conf) const override;
          static const uint32_t m_id_factory = cstr2hash("CaliceObject");
@@ -22,7 +22,7 @@ namespace eudaq {
    };
 
    namespace {
-      auto dummy0 = Factory<LCEventConverter>::Register<AHCalRawEvent2LCEventConverter>(AHCalRawEvent2LCEventConverter::m_id_factory);
+      auto dummy0 = Factory<LCEventConverter>::Register<CaliceRawEvent2LCEventConverter>(CaliceRawEvent2LCEventConverter::m_id_factory);
    }
 
    static const char* EVENT_TYPE = "CaliceObject";
@@ -50,7 +50,7 @@ namespace eudaq {
          }
    };
 
-   bool AHCalRawEvent2LCEventConverter::Converting(EventSPC d1, LCEventSP d2, ConfigurationSPC conf) const {
+   bool CaliceRawEvent2LCEventConverter::Converting(EventSPC d1, LCEventSP d2, ConfigurationSPC conf) const {
       // try to cast the Event
       auto& source = *(d1.get());
       auto& result = *(d2.get());
@@ -266,7 +266,7 @@ namespace eudaq {
 
    }
 
-   LCCollectionVec* AHCalRawEvent2LCEventConverter::createCollectionVec(lcio::LCEvent &result, string colName, string dataDesc, time_t timestamp,
+   LCCollectionVec* CaliceRawEvent2LCEventConverter::createCollectionVec(lcio::LCEvent &result, string colName, string dataDesc, time_t timestamp,
          int DAQquality) const {
       LCCollectionVec *col = 0;
       try {
@@ -288,7 +288,7 @@ namespace eudaq {
       return col;
    }
 
-   void AHCalRawEvent2LCEventConverter::getScCALTemperatureSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
+   void CaliceRawEvent2LCEventConverter::getScCALTemperatureSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
 
       // sensor specific data
       cout << "Looking for Temperature Collection... Evt=" << m_debug_lastEventtEvent << ", Size=" << bl.size() << endl;
@@ -330,7 +330,7 @@ namespace eudaq {
       }
    }
 
-   void AHCalRawEvent2LCEventConverter::getScCALHVSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
+   void CaliceRawEvent2LCEventConverter::getScCALHVSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
       cout << "Looking for Bias adjustment Collection... " << endl;
 
       vector<int> vec;
@@ -359,7 +359,7 @@ namespace eudaq {
       }
    }
 
-   void AHCalRawEvent2LCEventConverter::getDataLCIOGenericObject(const std::vector<uint8_t> & bl, LCCollectionVec *col, int nblock) const {
+   void CaliceRawEvent2LCEventConverter::getDataLCIOGenericObject(const std::vector<uint8_t> & bl, LCCollectionVec *col, int nblock) const {
 
       // further blocks should be data (currently limited to integer)
 
@@ -380,7 +380,7 @@ namespace eudaq {
 
    }
 
-   void AHCalRawEvent2LCEventConverter::getDataLCIOGenericObject(eudaq::RawDataEvent const * rawev, LCCollectionVec *col, int nblock, int nblock_max) const {
+   void CaliceRawEvent2LCEventConverter::getDataLCIOGenericObject(eudaq::RawDataEvent const * rawev, LCCollectionVec *col, int nblock, int nblock_max) const {
 
       if (nblock_max == 0) nblock_max = rawev->NumBlocks();
       while (nblock < nblock_max) {

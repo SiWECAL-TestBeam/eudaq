@@ -419,7 +419,23 @@ void CorrelationCollection::registerPlaneCorrelations(
     _mon->getOnlineMon()->registerHisto(
         tree, getCorrelationHistos(p1, p2)->getCorrYHisto(), "COLZ", 0);
     _mon->getOnlineMon()->registerMutex(
-	tree, getCorrelationHistos(p1, p2)->getMutex());
+    tree, getCorrelationHistos(p1, p2)->getMutex());
+
+    sprintf(tree, "%s/%s %i/%s %i diff (X)", dirName.c_str(), p1.getName().c_str(),
+            p1.getID(), p2.getName().c_str(), p2.getID());
+    _mon->getOnlineMon()->registerTreeItem(tree);
+    _mon->getOnlineMon()->registerHisto(
+        tree, getCorrelationHistos(p1, p2)->getDiffXHisto(), "histo", 0);
+    _mon->getOnlineMon()->registerMutex(
+    tree, getCorrelationHistos(p1, p2)->getMutex());
+
+    sprintf(tree, "%s/%s %i/%s %i diff (Y)", dirName.c_str(), p1.getName().c_str(),
+            p1.getID(), p2.getName().c_str(), p2.getID());
+    _mon->getOnlineMon()->registerTreeItem(tree);
+    _mon->getOnlineMon()->registerHisto(
+        tree, getCorrelationHistos(p1, p2)->getDiffYHisto(), "histo", 0);
+    _mon->getOnlineMon()->registerMutex(
+    tree, getCorrelationHistos(p1, p2)->getMutex());
 
     sprintf(tree, "%s/%s %i", dirName.c_str(), p1.getName().c_str(),
             p1.getID());
@@ -427,7 +443,7 @@ void CorrelationCollection::registerPlaneCorrelations(
   }
 
 
-  if (_mon != NULL) {
+   if (_mon != NULL) {
     std::string dirName;
 
     if (_mon->getUseTrack_corr() == true)
@@ -456,7 +472,7 @@ void CorrelationCollection::registerPlaneCorrelations(
     sprintf(tree, "%s/%s %i", dirName.c_str(), p1.getName().c_str(),
             p1.getID());
     _mon->getOnlineMon()->makeTreeItemSummary(tree);
-  }
+    }
 
 
 }
