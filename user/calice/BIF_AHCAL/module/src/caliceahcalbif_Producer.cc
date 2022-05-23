@@ -682,7 +682,7 @@ void caliceahcalbifProducer::ProcessQueuedBifData() {
             trigger_push_back(_cycleData, 0x01000000, (uint32_t) evtNumber, (uint32_t) ((timestamp << 5) | fineStamps[0]));
             break;
          case 0x01: //external trigger
-            if ((timestamp << 5) - _lastTriggerTime > _consecutiveTriggerIgnorePeriod) {
+	   if ( (_consecutiveTriggerIgnorePeriod == 0) or ((timestamp << 5) - _lastTriggerTime > _consecutiveTriggerIgnorePeriod)) {
                _triggersInCycle++;
                _lastTriggerTime = (timestamp << 5);
                for (int input = 3; input >= 0; --input) {
@@ -710,7 +710,7 @@ void caliceahcalbifProducer::ProcessQueuedBifData() {
                   }
                }
             } else {
-               //std::cout << "Trigger too soon after the previous trigger, eventNr=" << evtNumber << ", Difference" << ((timestamp << 5) - _lastTriggerTime) << std::endl;
+               std::cout << "Trigger too soon after the previous trigger, eventNr=" << evtNumber << ", Difference" << ((timestamp << 5) - _lastTriggerTime) << std::endl;
             }
 
             break;
