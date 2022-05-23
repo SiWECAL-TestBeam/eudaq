@@ -101,6 +101,8 @@ void AHCALProducer::DoConfigure() {
    _minEventHits = param.Get("MinimumEventHits", 1); //count of contributing ASICs
 
    uint32_t timestampTbCampaign = param.Get("Timestamp_Of_TBCampaign", 0);
+   _SlowdownMillisecAfterEvents = param.Get("SlowdownMillisecAfterEvents",0);
+
 
    _reader->setTbTimestamp(timestampTbCampaign);
    // std::cout<<"timestamp of TB campaign: "<<_timestampTbCampaign<<std::endl;
@@ -338,6 +340,10 @@ void AHCALProducer::sendallevents(std::deque<eudaq::EventUP> & deqEvent, int min
          if ((deqEvent.front()->GetBlockNumList().size() - 10) >= _minEventHits) {
             _eventNo++;      // = deqEvent.front()->GetEventN();
             SendEvent(std::move(deqEvent.front()));
+	    if (_SlowdownMillisecAfterEvents){
+	      if ( (_eventNo % _SlowdownMillisecAfterEvents) == 0)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	    }
          }
          deqEvent.pop_front();
       }
