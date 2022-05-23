@@ -537,7 +537,7 @@ namespace eudaq {
                std::cout << "Info: Possibly incomplete BXID=" << AhcalBxid << " in ROC=" << roc << ". Another layer got full at bxid="
                      << minLastBxid_Detector[roc] << std::endl;
             }
-            if (AhcalBxid > (minLastBxid_Detector[roc] + 4)) {
+            if (AhcalBxid > (minLastBxid_Detector[roc] + 100)) {
                EUDAQ_ERROR_STREAMOUT(
                      "BXID " + to_string(AhcalBxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
                            + " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
@@ -891,7 +891,7 @@ namespace eudaq {
          for (std::vector<int> &dit : data) { // = data.begin(); dit != data.end(); ++dit
             int bxid = (int) dit[1];
             if (minLastBxid_Detector.count(roc)) {
-               if (bxid > (minLastBxid_Detector[roc] + 4)) {
+               if (bxid > (minLastBxid_Detector[roc] + 100)) {
                   EUDAQ_ERROR_STREAMOUT(
                         "BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc) + " ASIC="
                               + to_string(dit[3] & 0xFF) + " Module=" + to_string(dit[3] >> 8), std::cout, std::cerr);
@@ -1279,7 +1279,7 @@ namespace eudaq {
 
          if (bxid > _producer->getMaximumBxid()) {
             //std::cout << "WARNING:  BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
-            EUDAQ_WARN("Throwing away BXID above threshold: bxid=" + to_string(bxid) + " ROC=" + to_string(_cycleNo) + " port=" + to_string(LDA_Header_port));
+	   EUDAQ_WARN("Throwing away BXID above threshold: bxid=" + to_string(bxid) +  ". ROC=" + to_string(_cycleNo) + " port=" + to_string(LDA_Header_port) + " Module=" + to_string((unsigned int )difId) + " Asic_index(from0)=" + to_string(chipId & 0xFF) + " Memory=" + to_string(MemoryCellsFilled - memCell - 1));
          }
          if (bxid < _producer->getMinimumBxid()) {
 //            std::cout << "WARNING: Throwing away BXID below threshold: BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
