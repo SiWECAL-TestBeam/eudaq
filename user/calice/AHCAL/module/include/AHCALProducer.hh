@@ -33,7 +33,7 @@ namespace eudaq {
          }
 
          virtual void setTbTimestamp( uint32_t ts){}
-         virtual uint32_t getTbTimestamp() const{}
+         virtual uint32_t getTbTimestamp() const {return 0;}
 
       public:
          std::mutex _eventBuildingQueueMutex;
