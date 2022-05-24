@@ -153,7 +153,50 @@ namespace eudaq {
     }
     os << std::string(offset, ' ') << "</Event>\n";
   }
-  
+
+   void Event::PrintWithBlocks(std::ostream &os, size_t offset, bool blocksInHex) const {
+      os << std::string(offset, ' ') << "<Event>\n";
+      os << std::string(offset + 2, ' ') << "<Type>" << m_type << "</Type>\n";
+      os << std::string(offset + 2, ' ') << "<Extendword>" << m_extend << "</Extendword>\n";
+      os << std::string(offset + 2, ' ') << "<Description>" << m_dspt << "</Description>\n";
+      os << std::string(offset + 2, ' ') << "<Flag>0x" << to_hex(m_flags, 8) << "</Flag>\n";
+      os << std::string(offset + 2, ' ') << "<RunN>" << m_run_n << "</RunN>\n";
+      os << std::string(offset + 2, ' ') << "<StreamN>" << m_stm_n << "</StreamN>\n";
+      os << std::string(offset + 2, ' ') << "<EventN>" << m_ev_n << "</EventN>\n";
+      os << std::string(offset + 2, ' ') << "<TriggerN>" << m_tg_n << "</TriggerN>\n";
+      os << std::string(offset + 2, ' ') << "<Timestamp>0x" << to_hex(m_ts_begin, 16)
+            << "  ->  0x" << to_hex(m_ts_end, 16) << "</Timestamp>\n";
+      os << std::string(offset + 2, ' ') << "<Timestamp>" << m_ts_begin
+            << "  ->  " << m_ts_end << "</Timestamp>\n";
+      if (!m_tags.empty()) {
+         os << std::string(offset + 2, ' ') << "<Tags>\n";
+         for (auto &tag : m_tags) {
+            os << std::string(offset + 4, ' ') << "<Tag>" << tag.first << "=" << tag.second << "</Tag>\n";
+         }
+         os << std::string(offset + 2, ' ') << "</Tags>\n";
+      }
+      os << std::string(offset + 2, ' ') << "<Block_Size>" << m_blocks.size() << "</Block_Size>\n";
+      for (auto block : m_blocks) {
+         os << std::string(offset + 4, ' ') << "<Block " << block.first<<">";
+         for (auto bbyte : block.second) {
+            if (blocksInHex)
+               os << to_hex(bbyte) << ",";
+            else
+               os << (uint32_t) bbyte << ",";
+         }
+         os << "</Block>\n";
+      }
+      if (!m_sub_events.empty()) {
+         os << std::string(offset + 2, ' ') << "<SubEvents>\n";
+         os << std::string(offset + 4, ' ') << "<Size>" << m_sub_events.size() << "</Size>\n";
+         for (auto &subev : m_sub_events) {
+            subev->PrintWithBlocks(os, offset + 4,blocksInHex);
+         }
+         os << std::string(offset + 2, ' ') << "</SubEvents>\n";
+      }
+      os << std::string(offset, ' ') << "</Event>\n";
+   }
+
   std::string Event::GetTag(const std::string & name, const std::string & def) const {
     auto i = m_tags.find(name);
     if (i == m_tags.end()) return def;

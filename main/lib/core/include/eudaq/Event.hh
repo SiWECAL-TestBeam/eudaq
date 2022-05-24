@@ -49,7 +49,8 @@ namespace eudaq {
     Event(Deserializer & ds);
     virtual void Serialize(Serializer &) const;
     virtual void Print(std::ostream & os, size_t offset = 0) const;
-    
+    virtual void PrintWithBlocks(std::ostream & os, size_t offset = 0, bool blocksInHex=false) const;
+
     bool HasTag(const std::string &name) const;
     void SetTag(const std::string &name, const std::string &val);
     std::string GetTag(const std::string &name, const std::string &def = "") const;
