@@ -33,7 +33,7 @@ namespace eudaq {
          }
 
          virtual void setTbTimestamp( uint32_t ts){}
-         virtual uint32_t getTbTimestamp() const{}
+         virtual uint32_t getTbTimestamp() const {return 0;}
 
       public:
          std::mutex _eventBuildingQueueMutex;
@@ -120,6 +120,7 @@ namespace eudaq {
          int _runNo;
          int _eventNo; //last sent event - for checking of correct event numbers sequence during sending events
          int _minEventHits;//minimum count of contributing ASICs
+         int _SlowdownMillisecAfterEvents;
 #ifdef _WIN32
          SOCKET _fd;
          std::ifstream _redirectedInputFstream;

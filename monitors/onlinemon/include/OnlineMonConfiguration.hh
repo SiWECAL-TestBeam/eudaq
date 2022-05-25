@@ -47,6 +47,7 @@ public:
   void setCorrel_minclustersize(int correl_minclustersize);
   std::vector<int> getPlanes_to_be_skipped() const;
   void setPlanes_to_be_skipped(std::vector<int> planes_to_be_skipped);
+  int getDisableCorrelations() const;
 
 private:
   // general settings
@@ -57,6 +58,7 @@ private:
   unsigned int mimosa26_max_sections;
   unsigned int mimosa26_section_boundary;
   // Correlation settings
+  int disableCorrelations;
   std::map<int, bool> correlation_xy_flip;
   std::vector<int> planes_to_be_skipped;
   int correl_minclustersize;

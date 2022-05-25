@@ -110,6 +110,7 @@ namespace eudaq {
     int _StartWaitSeconds;
     int _waitmsFile; // period to wait at each ::read() at file mode
     int _waitsecondsForQueuedEvents; // period to wait after each run to read the queued events
+    int _SlowdownMillisecAfterEvents; //wait 1 ms after given amount of events
     int _port; // input port at network mode
     std::string _ipAddress; // input address at network mode
 

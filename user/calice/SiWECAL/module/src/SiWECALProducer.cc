@@ -54,6 +54,7 @@ void SiWECALProducer::DoConfigure() {
    // file name
    _waitmsFile = param.Get("WaitMillisecForFile", 100);
    _waitsecondsForQueuedEvents = param.Get("waitsecondsForQueuedEvents", 2);
+   _SlowdownMillisecAfterEvents = param.Get("SlowdownMillisecAfterEvents",0);
 
     // raw output
    _writeRaw = param.Get("WriteRawOutput", 1);
@@ -283,13 +284,16 @@ void SiWECALProducer::sendallevents(std::deque<eudaq::EventUP> & deqEvent, int m
 
 	 // if ((deqEvent.front()->GetBlockNumList().size() - 10) >= _minEventHits) {
 	 if ((deqEvent.front()->GetBlockNumList().size()>0) ) {
-            _eventNo++;      // = deqEvent.front()->GetEventN();
+	    _eventNo++;      // = deqEvent.front()->GetEventN();
             SendEvent(std::move(deqEvent.front()));
+	    if (_SlowdownMillisecAfterEvents){
+	      if ( (_eventNo % _SlowdownMillisecAfterEvents) == 0)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	    }
          }
-         deqEvent.pop_front();
+	 deqEvent.pop_front();
       }
    }
-
 }
 
 void SiWECALProducer::RunLoop() {

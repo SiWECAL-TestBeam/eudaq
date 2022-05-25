@@ -537,7 +537,7 @@ namespace eudaq {
                std::cout << "Info: Possibly incomplete BXID=" << AhcalBxid << " in ROC=" << roc << ". Another layer got full at bxid="
                      << minLastBxid_Detector[roc] << std::endl;
             }
-            if (AhcalBxid > (minLastBxid_Detector[roc] + 4)) {
+            if (AhcalBxid > (minLastBxid_Detector[roc] + 100)) {
                EUDAQ_ERROR_STREAMOUT(
                      "BXID " + to_string(AhcalBxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc)
                            + " ASIC=" + to_string(asic) + " Module=" + to_string(module), std::cout, std::cerr);
@@ -627,7 +627,7 @@ namespace eudaq {
                         + to_string(firstAsicROC));
 //            if (_producer->getInsertDummyPackets()) {            }
          }
-	 std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
+         std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
          //create a table with BXIDs:
          std::map<int, std::vector<std::vector<int> > > bxids; //bxids mapped to the ASIC packets.
 //         std::cout << "DEBUG processing readout cycle " << processedROC << std::endl;
@@ -638,7 +638,7 @@ namespace eudaq {
                int bxid = (int) dit[1];
 //            std::cout << "DEBUG data bxid " << bxid << std::endl;
 //               std::cout << "bxid " << (int) dit[1] << "\t chipid: " << (int) dit[3] << std::endl;
-               std::vector<std::vector<int> >& sameBxidPackets = bxids.insert( { bxid, std::vector<std::vector<int> >() }).first->second;
+               std::vector<std::vector<int> > &sameBxidPackets = bxids.insert( { bxid, std::vector<std::vector<int> >() }).first->second;
                sameBxidPackets.push_back(std::move(dit));
             }
          }
@@ -728,7 +728,8 @@ namespace eudaq {
                //no matching AHCAL data. trigger valid. In this case the particle didn't reach ahcal
 //               std::cout << "DEBUG: insertEmptyEvent due to ahcal bxid=" << AhcalBxid << " trigbxid=" << triggerBxid << std::endl;
                if (_producer->getMinEventHits() == 0) {
-		 EventQueue.push_back(std::move(insertEmptyEvent(stopTS, startTS, triggerRawTrigId, triggerTs, ++_lastBuiltEventNr, triggerBxid, processedROC, ErrorStatus)));
+                  EventQueue.push_back(
+                        std::move(insertEmptyEvent(stopTS, startTS, triggerRawTrigId, triggerTs, ++_lastBuiltEventNr, triggerBxid, processedROC, ErrorStatus)));
 //               trigIt++;
                   continue;//trigger is send out, let continue with the next trigger
                }
@@ -793,7 +794,7 @@ namespace eudaq {
             nev->SetTag("ROCStartTS", startTS);
             nev->SetTag("TrigBxidTdc", (int) ((triggerTs - startTS - _producer->getAhcalbxid0Offset()) % _producer->getAhcalbxidWidth()));
             nev->SetTriggerN(triggerRawTrigId + _producer->getLdaTrigidOffset());
-	    //            nev->SetTriggerN(++_lastBuiltEventNr);
+            //            nev->SetTriggerN(++_lastBuiltEventNr);
 //            std::cout << "DEBUG    evts numbers _last=" << _lastBuiltEventNr << " calc=" << (triggerRawTrigId + _producer->getLdaTrigidOffset()) << std::endl;
             nev->SetTag("DAQ_ERROR_STATUS", ErrorStatus);
             nev->SetTag("tbTimestamp", tbTimestamp);
@@ -834,12 +835,12 @@ namespace eudaq {
                   nev->ClearFlagBit(eudaq::Event::Flags::FLAG_TIME);
                   break;
                case AHCALProducer::EventNumbering::TIMESTAMP:
-               default:
+                  default:
                   nev->SetFlagBit(eudaq::Event::Flags::FLAG_TIME);
                   nev->ClearFlagBit(eudaq::Event::Flags::FLAG_TRIG);
                   break;
             }
-            for (auto & minipacket : sameBxidPacketIterator->second) {
+            for (auto &minipacket : sameBxidPacketIterator->second) {
                if (minipacket.size()) {
                   if (_producer->getInsertDummyPackets() && (IntraBxidTriggers > 1)) {
                      nev_raw->AddBlock(nev_raw->NumBlocks(), minipacket);
@@ -891,7 +892,7 @@ namespace eudaq {
          for (std::vector<int> &dit : data) { // = data.begin(); dit != data.end(); ++dit
             int bxid = (int) dit[1];
             if (minLastBxid_Detector.count(roc)) {
-               if (bxid > (minLastBxid_Detector[roc] + 4)) {
+               if (bxid > (minLastBxid_Detector[roc] + 100)) {
                   EUDAQ_ERROR_STREAMOUT(
                         "BXID " + to_string(bxid) + " way behind the end of acq(" + to_string(minLastBxid_Detector[roc]) + "). ROC=" + to_string(roc) + " ASIC="
                               + to_string(dit[3] & 0xFF) + " Module=" + to_string(dit[3] >> 8), std::cout, std::cerr);
@@ -990,65 +991,93 @@ namespace eudaq {
       int keptEventCount = dumpAll ? 0 : _producer->getKeepBuffered(); //how many ROCs to keep in the data maps
 //      keptEventCount = 100000;
       while (_LDAAsicData.size() > keptEventCount) { //at least 2 finished ROC
-
          while (_producer->getInsertDummyPackets() && (++_lastBuiltEventNr < _LDAAsicData.begin()->first))
             insertDummyEvent(EventQueue, _lastBuiltEventNr, -1, false);
-         int roc = _LDAAsicData.begin()->first; //_LDAAsicData.begin()->first;
+         int processedROC = _LDAAsicData.begin()->first; //_LDAAsicData.begin()->first;
          std::vector<std::vector<int> > &data = _LDAAsicData.begin()->second;
          eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
          eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
          prepareEudaqRawPacket(nev_raw);
-         nev->SetTag("ROC", roc);
-
-//         nev->SetEventN(roc);
+         nev->SetTag("ROC", processedROC);
          for (std::vector<std::vector<int> >::iterator idata = data.begin(); idata != data.end(); ++idata) {
             if (idata->size()) {
                nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(*idata));
             }
          }
-//nev->Print(std::cout, 0);
-         if (_LDATimestampData.count(roc) && (!_producer->getIgnoreLdaTimestamps())) {
-            nev->SetTag("ROCStartTS", _LDATimestampData[roc].TS_Start);
-            if (_LDATimestampData[roc].TS_Start && _LDATimestampData[roc].TS_Stop) {
+         int ErrorStatus = 0; // prepare the status mask for DAQ_ERRORS_
+         uint64_t startTS = 0LLU;
+         uint64_t stopTS = 0LLU;
+         if (_LDATimestampData.count(processedROC) && (!_producer->getIgnoreLdaTimestamps())) {
+            startTS = _LDATimestampData[processedROC].TS_Start;
+            stopTS = _LDATimestampData[processedROC].TS_Stop;
+            nev->SetTag("ROCStartTS", startTS);
+            if (startTS && stopTS) {
                //save timestamp only if both timestamps are present. Otherwise there was something wrong in the data
-               nev->SetTimestamp(_LDATimestampData[roc].TS_Start, _LDATimestampData[roc].TS_Stop, true);
+               nev->SetTimestamp(startTS, stopTS, true);
             } else {
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
-               std::cout << "ERROR EB: one of the timestamp is incorrect in ROC " << roc << ". Start=" << _LDATimestampData[roc].TS_Start << " STOP="
-                     << _LDATimestampData[roc].TS_Stop << std::endl;
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+               colorPrint(TERMCOLOR_RED_BOLD,
+                     "ERROR EB: one of the timestamp is incorrect in ROC " + to_string(processedROC) + ". Start=" + to_string(startTS) + " STOP="
+                           + to_string(stopTS));
             }
-            if (_LDATimestampData[roc].TS_Stop - _LDATimestampData[roc].TS_Start > 100 * C_MILLISECOND_TICS) {
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
-               std::cout << "ERROR EB: Length of the acquisition is longer than 100 ms in ROC " << roc << std::endl;
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+            if ((startTS != 0LLU) && (stopTS != 0LLU) && ((stopTS - startTS) > 100 * C_MILLISECOND_TICS)) {
+               colorPrint(TERMCOLOR_RED_BOLD, "ERROR EB: Length of the acquisition is longer than 100 ms in ROC " + to_string(processedROC));
             }
             std::vector<uint32_t> cycledata;
-            cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start));
-            cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Start >> 32));
-            cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop));
-            cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Stop >> 32));
-            if (_LDATimestampData[roc].TS_Triggers.size()) {
-               cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back()));
-               cycledata.push_back((uint32_t) (_LDATimestampData[roc].TS_Triggers.back() >> 32));
+            cycledata.push_back((uint32_t) (startTS));
+            cycledata.push_back((uint32_t) (startTS >> 32));
+            cycledata.push_back((uint32_t) (stopTS));
+            cycledata.push_back((uint32_t) (stopTS >> 32));
+            if (_LDATimestampData[processedROC].TS_Triggers.size()) {
+               for (int i = 0; i < _LDATimestampData[processedROC].TS_Triggers.size(); ++i) {
+                  uint64_t trigTS = _LDATimestampData[processedROC].TS_Triggers[i];
+                  cycledata.push_back((uint32_t) trigTS);
+                  cycledata.push_back((uint32_t) (trigTS >> 32));
+               }
             } else {
                cycledata.push_back((uint32_t) 0);
                cycledata.push_back((uint32_t) 0);
             }
             nev_raw->AppendBlock(6, cycledata);
-            _LDATimestampData.erase(roc);
+            _LDATimestampData.erase(processedROC);
          } else {
             if (!_producer->getIgnoreLdaTimestamps()) {
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[31m";
-               std::cout << "ERROR EB: matching LDA timestamp information not found for ROC " << roc << std::endl;
-               if (_producer->getColoredTerminalMessages()) std::cout << "\033[0m";
+               colorPrint(TERMCOLOR_RED_BOLD, "ERROR EB: matching LDA timestamp information not found for ROC " + to_string(processedROC));
             }
          }
+         if (!startTS) ErrorStatus |= DAQ_ERRORS_MISSING_START;
+         if (!stopTS) ErrorStatus |= DAQ_ERRORS_MISSING_STOP;
+         nev->SetTag("DAQ_ERROR_STATUS", ErrorStatus);
+         uint64_t tbTimestamp = (uint64_t) this->getTbTimestamp();
+         nev->SetTag("tbTimestamp", tbTimestamp); //timestamp for reprocessing and setting the slcio date
+         if (startTS && (!_producer->getIgnoreLdaTimestamps())) {
+            nev->SetTimestamp(startTS + _producer->getAhcalbxid0Offset(), stopTS, true);               //false?
+            nev->SetTag("LDATS_Low", ((startTS + _producer->getAhcalbxid0Offset()) * 25) & 0x00000000FFFFFFFF);
+            nev->SetTag("LDATS_High", (stopTS * 25) >> 32);
+         }
+         //stopping data
+         std::vector<std::pair<int, int> > stoppingBxidData;
+         std::map<int, std::map<int, int>>::iterator it2;
+         it2 = minLastBxid_Asic.find(processedROC);
+         if (it2 == minLastBxid_Asic.end()) {         //if roc is not in the map (roc was not ended by memCell 15)
+               //std::cout<<"roc"<< roc<<" not ended by full memcell"<<std::endl;
+            stoppingBxidData.push_back(std::make_pair(-1, -1));
+         } else {
+            int tmp = 65535;
+            std::pair<int, int> tmpPair;
+            for (auto const &i : it2->second) {           //if roc is in the map, find asic with lowest bxid with memCell 15
+               if (i.second < tmp) {
+                  tmp = i.second;
+                  tmpPair = std::make_pair(i.first, i.second);
+               }
+            }
+            stoppingBxidData.push_back(tmpPair);     //first pair in vector gives asic and min bxid with memCell 15
+         }
+         nev_raw->AppendBlock(7, stoppingBxidData);
 
          EventQueue.push_back(std::move(nev));
          _LDAAsicData.erase(_LDAAsicData.begin());
          while (_LDATimestampData.begin() != _LDATimestampData.end()) {
-            if (_LDATimestampData.begin()->first <= roc) {
+            if (_LDATimestampData.begin()->first <= processedROC) {
                //               std::cout << "DEBUG: erasing timestamp ROC " << processedROC << std::endl;
                _LDATimestampData.erase(_LDATimestampData.begin());
             } else
@@ -1279,7 +1308,7 @@ namespace eudaq {
 
          if (bxid > _producer->getMaximumBxid()) {
             //std::cout << "WARNING:  BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;
-            EUDAQ_WARN("Throwing away BXID above threshold: bxid=" + to_string(bxid) + " ROC=" + to_string(_cycleNo) + " port=" + to_string(LDA_Header_port));
+	   EUDAQ_WARN("Throwing away BXID above threshold: bxid=" + to_string(bxid) +  ". ROC=" + to_string(_cycleNo) + " port=" + to_string(LDA_Header_port) + " Module=" + to_string((unsigned int )difId) + " Asic_index(from0)=" + to_string(chipId & 0xFF) + " Memory=" + to_string(MemoryCellsFilled - memCell - 1));
          }
          if (bxid < _producer->getMinimumBxid()) {
 //            std::cout << "WARNING: Throwing away BXID below threshold: BXID: " << bxid << " in ROC " << _cycleNo << ", port " << LDA_Header_port << std::endl;

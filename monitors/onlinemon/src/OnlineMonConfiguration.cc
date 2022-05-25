@@ -140,7 +140,8 @@ int OnlineMonConfiguration::ReadConfigurationFile() {
           for (unsigned int element = 0; element < v.size(); element++) {
             planes_to_be_skipped.push_back(StringToNumber<int>(v[element]));
           }
-
+        } else if (key.compare("DisableCorrelations") == 0) {
+	  disableCorrelations = StringToNumber<int>(value);
         } else {
           cerr << "Unknown Key " << key << endl;
         }
@@ -305,3 +306,7 @@ unsigned int OnlineMonConfiguration::stringsplit(string str, char c,
   }
   return v.size();
 }
+ 
+int OnlineMonConfiguration::getDisableCorrelations() const {
+  return disableCorrelations;
+};

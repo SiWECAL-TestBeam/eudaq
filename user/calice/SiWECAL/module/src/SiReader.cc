@@ -488,6 +488,7 @@ namespace eudaq {
     if (rocnumber > 0) nev->SetEventN(rocnumber);//roc ?? AIQ
     if (triggerid > 0) nev->SetTriggerN(triggerid, triggeridFlag); //bcid ?? AIQ
     nev->SetTag("Dummy", 1);
+    nev->SetTag("ROC", rocnumber);
     deqEvent.push_back(std::move(nev));
     if(_debug) cout<<"INSERTING DUMMY EVENT: "<<rocnumber<<endl;
       

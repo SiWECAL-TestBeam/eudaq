@@ -15,6 +15,8 @@ int main(int /*argc*/, const char **argv) {
   eudaq::Option<uint32_t> timestamph(op, "TS", "timestamphigh", 0, "uint32_t", "timestamp high");
   eudaq::OptionFlag stat(op, "s", "statistics", "enable print of statistics");
   eudaq::OptionFlag stdev(op, "std", "stdevent", "enable converter of StdEvent");
+  eudaq::OptionFlag printBlocks(op, "b", "printBlocks", "enable print of data in the blocks");
+  eudaq::OptionFlag printHexBlocks(op, "h", "printHexBlocks", "enable print of data in the blocks in hex format");
 
   op.Parse(argv);
 
@@ -23,7 +25,10 @@ int main(int /*argc*/, const char **argv) {
   if(type_in=="raw")
     type_in = "native";
 
-  bool stdev_v = stdev.Value();
+   bool stdev_v = stdev.Value();
+   bool printBlocks_v = printBlocks.Value();
+   bool printHexBlocks_v = printHexBlocks.Value();
+   std::cout << "debug printHexBlocks_v=" << printHexBlocks_v << std::endl;
 
 
   uint32_t eventl_v = eventl.Value();
@@ -75,8 +80,13 @@ int main(int /*argc*/, const char **argv) {
 
 
     if((in_range_evn && in_range_tgn && in_range_tsn) && not_all_zero){
-      ev->Print(std::cout);
-      if(stdev_v){
+         if (printBlocks_v)
+            ev->PrintWithBlocks(std::cout, 0, false);
+         else if (printHexBlocks_v)
+            ev->PrintWithBlocks(std::cout, 0, true);
+         else
+            ev->Print(std::cout);
+         if(stdev_v){
         auto evstd = eudaq::StandardEvent::MakeShared();
         eudaq::StdEventConverter::Convert(ev, evstd, nullptr);
         std::cout<< ">>>>>"<< evstd->NumPlanes() <<"<<<<"<<std::endl;

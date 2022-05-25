@@ -96,6 +96,9 @@ RootMonitor::RootMonitor(const std::string & runcontrol,
       mon_configdata.SetDefaults();
     }
   }
+ 
+  if (mon_configdata.getDisableCorrelations()) _colls.erase(_colls.begin()+1);
+
   // print the configuration
   mon_configdata.PrintConfiguration();
 
