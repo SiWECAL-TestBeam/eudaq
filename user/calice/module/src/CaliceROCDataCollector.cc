@@ -37,7 +37,7 @@ class CaliceROCDataCollector: public eudaq::DataCollector {
 
    private:
       void AddEvent_TimeStamp(uint32_t id, eudaq::EventSPC ev);
-      void BuildEvent_bxid();
+      void BuildEvent_roc();
 
       std::mutex m_mutex;
       //to be edited according to the name of the processes. TODO implement as parameter to the configuration
@@ -172,7 +172,7 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
    if (con_name == mc_name_ahcal)
       m_que_ahcal.push_back(std::move(ev));
    else if (con_name == mc_name_ecal)
-      m_que_bif.push_back(std::move(ev));
+      m_que_ecal.push_back(std::move(ev));
    else if (con_name == mc_name_bif)
       m_que_bif.push_back(std::move(ev));
    else if (con_name == mc_name_desytable)
@@ -184,10 +184,10 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
 
    //quit if not enough events to merge
    if (m_que_ahcal.empty() && m_active_ahcal) return;
-   if (m_que_ahcal.empty() && m_active_ecal) return;
+   if (m_que_ecal.empty() && m_active_ecal) return;
    if (m_que_bif.empty() && m_active_bif) return;
 // std::cout<<"p 1 \n";
-   BuildEvent_bxid();
+   BuildEvent_roc();
 }
 
 //DataCollectorSP DataCollector::Make(const std::string &code_name,
@@ -198,7 +198,7 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
 //   (eudaq::str2hash(code_name), run_name, runcontrol);
 //}
 
-inline void CaliceROCDataCollector::BuildEvent_bxid() {
+inline void CaliceROCDataCollector::BuildEvent_roc() {
    //calculate the ahcal2bif offset if needed
 //   if (!m_offset_ahcal2bif_done) {
 //      if ((m_active_ahcal == false) || (m_active_bif == false)) {
@@ -234,10 +234,12 @@ inline void CaliceROCDataCollector::BuildEvent_bxid() {
             + "," + std::to_string(m_que_desytable.size()) + ")");
       if (std::chrono::system_clock::now() - lastprinttime > std::chrono::milliseconds(5000)) {
          lastprinttime = std::chrono::system_clock::now();
-         std::cout << "Queue sizes: AHCAL:" << m_que_ahcal.size();
-         std::cout << " ECAL:" << m_que_ahcal.size();
-         std::cout << " BIF:" << m_que_bif.size();
-         std::cout << " table:" << m_que_desytable.size() << std::endl;
+         std::cout << "Queue sizes: ";
+         if (m_active_ahcal) std::cout << "AHCAL:" << m_que_ahcal.size();
+         if (m_active_ecal) std::cout << " ECAL:" << m_que_ecal.size();
+         if (m_active_bif) std::cout << " BIF:" << m_que_bif.size();
+         if (m_active_desytable) std::cout << " table:" << m_que_desytable.size();
+         std::cout << std::endl;
       }
 //      int bxid_ahcal = mc_bxid_invalid;
 //      int bxid_bif = mc_bxid_invalid;
@@ -294,7 +296,10 @@ inline void CaliceROCDataCollector::BuildEvent_bxid() {
       }
 
       // at this point all producers have something in the buffer (if possible)
-      bool present_ahcal = false, present_bif = false, present_hodoscope1 = false, present_hodoscope2 = false, present_desytable = false; //whether event is present in the merged event
+      bool present_ahcal = false;
+      bool present_ecal = false;
+      bool present_bif = false;
+      bool present_desytable = false; //whether event is present in the merged event
 
       int processedRoc = mc_roc_invalid;
       if (roc_ahcal < processedRoc) processedRoc = roc_ahcal;
@@ -322,6 +327,14 @@ inline void CaliceROCDataCollector::BuildEvent_bxid() {
          }
       }
 
+      if (roc_ecal == processedRoc) {
+         if (!m_que_ecal.empty()) {
+            ev_sync->AddSubEvent(std::move(m_que_ecal.front()));
+            m_que_ecal.pop_front();
+            present_ecal = true;
+         }
+      }
+
       if (!m_que_desytable.empty()) {
          ev_sync->AddSubEvent(std::move(m_que_desytable.front()));
          m_que_desytable.pop_front();
@@ -340,6 +353,7 @@ inline void CaliceROCDataCollector::BuildEvent_bxid() {
       }
       m_thrown_incomplete += 1; //increase in case the loop is exit in following lines
       if (m_evt_mandatory_ahcal && (!present_ahcal) && (m_active_ahcal)) continue; //throw awway incomplete event
+      if (m_evt_mandatory_ecal && (!present_ecal) && (m_active_ecal)) continue; //throw awway incomplete event
       if (m_evt_mandatory_bif && (!present_bif) && (m_active_bif)) continue; //throw awway incomplete event
       m_thrown_incomplete -= 1; //and decrease back.
       ev_sync->SetEventN(m_ev_n++);
