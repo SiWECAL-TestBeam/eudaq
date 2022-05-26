@@ -24,13 +24,16 @@ private:
   uint64_t m_ts_bore_siecal;
   std::deque<eudaq::EventSPC> m_que_siecal;
 
-  int retrigger_th=3;
+  int retrigger_th=4;
   int bcid_th_siecal=2;
+  std::mutex m_mutex;
+  uint32_t m_ev_n;
+  int  th_coincidences=1; //more than th_coincidences layers in coincidence
   
   // datablocks BuildSiECAL(std::vector<std::vector<int>> vector_of_blocks_siecal);
   std::map<int,std::vector<std::vector<int>> > BuildSiECAL(std::vector<std::vector<int>> vector_of_blocks_siecal);
   std::vector<std::vector<int>> FilterSiECAL(std::vector<std::vector<int>> vector_of_blocks_siecal);
- 
+  eudaq::EventUP BxidEvent(int bxid,std::vector<std::vector<int>> vector_of_blocks_siecal);
 };
 
 namespace{
@@ -56,11 +59,12 @@ void CaliceSiECALBxidDataCollector::DoConnect(eudaq::ConnectionSPC id){
 
 void CaliceSiECALBxidDataCollector::DoDisconnect(eudaq::ConnectionSPC id){
   std::cout<<"disconnect producer connection: "<<id;
-}
+ }
 
 
 void CaliceSiECALBxidDataCollector::DoStartRun(){
   m_que_siecal.clear();
+  m_ev_n = 0;
 }
 
 void CaliceSiECALBxidDataCollector::DoConfigure(){
@@ -81,7 +85,10 @@ void CaliceSiECALBxidDataCollector::DoReceive(eudaq::ConnectionSPC id, eudaq::Ev
 
   //  std::cout<<"  ---------- NAME "<<id->GetName()<<std::endl;
   // while(!m_que_bif.empty() && !m_que_cal.empty()){
+  std::lock_guard<std::mutex> lock(m_mutex);
   while(!m_que_siecal.empty()){
+    SetStatusTag("Queue", std::string("(") + "," + std::to_string(m_que_siecal.size())
+            + ")");
 
     auto ev_siecal = m_que_siecal.front();
     
@@ -100,22 +107,16 @@ void CaliceSiECALBxidDataCollector::DoReceive(eudaq::ConnectionSPC id, eudaq::Ev
 
     if(siecal_blocks.size()>0) {
       std::map<int,std::vector<std::vector<int>> > sorted_bybcid= BuildSiECAL(siecal_blocks);
-      
       std::map<int,std::vector<std::vector<int>> > ::iterator it;
       for (it=sorted_bybcid.begin(); it!=sorted_bybcid.end(); ++it) {
-	auto ev_sub_siecal =  eudaq::Event::MakeUnique("CaliceObject");
-	ev_sub_siecal->SetTag("SiECAL_ROC",ev_siecal->GetTag("ROC", -1));
-	ev_sub_siecal->SetTag("SiECAL_NSLBs",ev_siecal->GetTag("NSLBs", -1));
-	//ev_sub_siecal->SetTag("SiECAL_StartAcqTime",ev_siecal->GetTag("StartAcqTime", -1)); // DOESN'T WORK -- to be checked
-	ev_sub_siecal->SetTag("SiECAL_BXID",it->first);
-	//copy all slowcontrol and info blocks
-	for(int iblock=0; iblock<(4+nslabs); iblock++) ev_sub_siecal->AddBlock(iblock,ev_siecal->GetBlock(iblock));
-	for(int i=0; i<it->second.size(); i++) {
-	  ev_sub_siecal->AddBlock(ev_sub_siecal->NumBlocks(),it->second.at(i));
+	eudaq::EventUP ev_sub_siecal =  BxidEvent(it->first,it->second);
+	if(  ev_sub_siecal->GetTag("Layers_in_coincidence",-1) > th_coincidences) {
+	  ev_sub_siecal->SetEventN(m_ev_n++);
+	  WriteEvent(std::move(ev_sub_siecal));
 	}
-	WriteEvent(std::move(ev_sub_siecal));
       }
     }
+
     m_que_siecal.pop_front();
 
     //WriteEvent(ev);
@@ -126,6 +127,54 @@ void CaliceSiECALBxidDataCollector::DoReceive(eudaq::ConnectionSPC id, eudaq::Ev
   }
 }
 
+//--------------------------------
+eudaq::EventUP CaliceSiECALBxidDataCollector::BxidEvent(int first, std::vector<std::vector<int>> second) {
+
+  auto ev_siecal = m_que_siecal.front();
+
+  eudaq::EventUP ev_sub_siecal =  eudaq::Event::MakeUnique("CaliceObject");
+  int nslabs=ev_siecal->GetTag("NSLBs",0);
+
+  ev_sub_siecal->SetTag("ROC",ev_siecal->GetTag("ROC", -1));
+  ev_sub_siecal->SetTag("NSLBs",ev_siecal->GetTag("NSLBs", -1));
+  ev_sub_siecal->SetTag("SiECAL_StartAcqTime",ev_siecal->GetTag("SiECAL_StartAcqTime", -1)); // DOESN'T WORK -- to be checked
+  ev_sub_siecal->SetTag("BXID",first);
+	
+  //copy all initial blocks
+  auto bl0 = ev_siecal->GetBlock(0);
+  std::string colName((char *) &bl0.front(), bl0.size());
+  ev_sub_siecal->AddBlock(0, colName.c_str(), colName.length());
+  
+  auto bl1 = ev_siecal->GetBlock(1);
+  std::string coldesc((char *) &bl1.front(), bl1.size());
+  ev_sub_siecal->AddBlock(1, coldesc.c_str(), coldesc.length());
+  
+  auto bl2 = ev_siecal->GetBlock(2);
+  std::vector<int> times;
+  times.resize(bl2.size() / sizeof(int));
+  memcpy(&times[0], &bl2[0], bl2.size());
+  ev_sub_siecal->AddBlock(2, bl2);//v, sizeof(v));
+  
+  auto bl3 = ev_siecal->GetBlock(3);
+  std::string colName2((char *) &bl3.front(), bl3.size());
+  ev_sub_siecal->AddBlock(3, colName2.c_str(), colName2.length());
+  //copy all slowcontrol and info blocks
+  for(int iblock=4; iblock<(4+nslabs); iblock++) ev_sub_siecal->AddBlock(ev_sub_siecal->NumBlocks(),ev_siecal->GetBlock(iblock));
+  int coincidences_per_layer[100]={0};
+  for(int i=0; i<second.size(); i++) {
+    ev_sub_siecal->AddBlock(ev_sub_siecal->NumBlocks(),second.at(i));
+    coincidences_per_layer[int(second.at(i).at(3))]++;
+  }
+  int ncoincidences=0;
+  for(int ilayer=0; ilayer<ev_siecal->GetTag("NSLBs", 0); ilayer ++)
+    if(coincidences_per_layer[ilayer]>0) ncoincidences++;
+
+  ev_sub_siecal->SetTag("Layers_in_coincidence",ncoincidences);
+
+  return ev_sub_siecal;
+}
+
+//--------------------------------
 std::map<int, std::vector<std::vector<int>>> CaliceSiECALBxidDataCollector::BuildSiECAL(std::vector<std::vector<int>> vector_of_blocks_siecal) {
   
  std::map<int, std::vector<std::vector<int>>> sorted_bybcid;
@@ -142,7 +191,7 @@ std::map<int, std::vector<std::vector<int>>> CaliceSiECALBxidDataCollector::Buil
   
   //** SECOND the EVENT BUILDING PART
 
-  //I create a map of bcid,datablocks with a merging of +-1, after filtering for retriggers
+  //I create a map of bcid,datablocks with a merging of +-bcid_th_sieca, after filtering for retriggers
   // 1) I check the first bcid that I find, later I check the rest of blocks and if I have a bcid+-1, I added to the bcid and remove those elements
   if(vector_of_blocks_siecal_filtered.size()==0) return sorted_bybcid;
   
@@ -153,18 +202,27 @@ std::map<int, std::vector<std::vector<int>>> CaliceSiECALBxidDataCollector::Buil
     // WORK IN PROGRESS
     // naive solution so far... to be improved
     std::map<int,std::vector<std::vector<int>> > ::iterator it;
-    it=sorted_bybcid.find(bcid_ref);
 
-    if(it == sorted_bybcid.end()) {
+    int bcid_it=-1;
+    for(int i=bcid_ref-bcid_th_siecal; i<bcid_ref+bcid_th_siecal+1; i++) {
+      it=sorted_bybcid.find(i);
+      if(it != sorted_bybcid.end()) {
+	bcid_it=i;
+      }
+    }
+    
+    if(bcid_it>0) {
+      bcid_ref=bcid_it;
+      sorted_bybcid[bcid_ref].push_back(vector_of_blocks_siecal_filtered.at(i));
+    } else {
       std::vector<std::vector<int>> new_vector_of_blocks;
       new_vector_of_blocks.push_back(vector_of_blocks_siecal_filtered.at(i));
       sorted_bybcid[bcid_ref]=new_vector_of_blocks;
-    } else {
-      sorted_bybcid[bcid_ref].push_back(vector_of_blocks_siecal_filtered.at(i));
     }
+    
     //cluster in bcid_ref all bcid+-bcid_th_siecal
     for(int j=i+1; j<vector_of_blocks_siecal_filtered.size(); j++) {
-      int bcid_ref2=vector_of_blocks_siecal_filtered.at(i).at(1);
+      int bcid_ref2=vector_of_blocks_siecal_filtered.at(j).at(1);
       if( fabs(bcid_ref-bcid_ref2)<bcid_th_siecal) {
 	sorted_bybcid[bcid_ref].push_back(vector_of_blocks_siecal_filtered.at(j));
 	vector_of_blocks_siecal_filtered.erase(vector_of_blocks_siecal_filtered.begin()+j-1);
@@ -185,13 +243,14 @@ std::map<int, std::vector<std::vector<int>>> CaliceSiECALBxidDataCollector::Buil
       bcid_av+=it->second.at(j).at(1);
     }
     bcid_av/=n_av;
-    sorted_bybcid2[bcid_av]=it->second;
+    sorted_bybcid2[int(bcid_av)]=it->second;
   }
   
   return sorted_bybcid2;
   
 }
 
+//--------------------------------
 std::vector<std::vector<int>> CaliceSiECALBxidDataCollector::FilterSiECAL(std::vector<std::vector<int>> vector_of_blocks_siecal) {
 
   //info of data structure
@@ -268,25 +327,28 @@ std::vector<std::vector<int>> CaliceSiECALBxidDataCollector::FilterSiECAL(std::v
 	  badbcid[i-1]=1;
 	  badbcid[i+1]=1;
 	} else badbcid[i]=0;
-      } else {
+      } else {//lastsca
 	bcid_scaminus1=it->second.at(i-1).at(1);
-	if( fabs(bcid_scaplus1-bcid)<retrigger_th ) {
+	if( fabs(bcid_scaminus1-bcid)<retrigger_th ) {
 	  badbcid[i]=1;
 	  badbcid[i-1]=1;
 	}
       }
 
       if(debug==1) std::cout<<"BADBCID:"<<badbcid[i]<<std::endl;
-      
     }
+
+    //I will treat the first retrigger as a "good trigger"... just in case.
+    for(int i=0; i<it->second.size(); i++) {
+      if(badbcid[i]==1) {
+	badbcid[i]=0;
+	break;
+      }
+    }
+      
     for(int i=0; i<it->second.size(); i++) {
       if(badbcid[i]==0) {
-      
-	vector_of_blocks_siecal_filtered.push_back(it->second.at(i));//vect2);
-	int n=vector_of_blocks_siecal_filtered.size();
-	//	for(int j=0; j<vector_of_blocks_siecal_filtered.at(n-1).size(); j++)
-	//  std::cout<<vector_of_blocks_siecal_filtered.at(n-1).at(j)<<" ";
-	//std::cout<<std::endl;
+      	vector_of_blocks_siecal_filtered.push_back(it->second.at(i));//vect2);
       }
     }
   }
