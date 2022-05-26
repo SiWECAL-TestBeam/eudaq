@@ -164,6 +164,7 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
       EUDAQ_WARN("Receive event fake");
       return;
    }
+   std::lock_guard<std::mutex> lock(m_mutex); //only 1 process should be allowed to make events
 //   if (ev->GetTag("BXID", mc_bxid_invalid) == mc_bxid_invalid) {
 //      EUDAQ_ERROR_STREAMOUT("Received event without BXID", std::cout, std::cerr);
 //      return;
@@ -187,6 +188,8 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
    if (m_que_ecal.empty() && m_active_ecal) return;
    if (m_que_bif.empty() && m_active_bif) return;
 // std::cout<<"p 1 \n";
+ // if (!m_disable_print) ev->Print(std::cout);
+
    BuildEvent_roc();
 }
 
@@ -199,32 +202,6 @@ void CaliceROCDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::EventSP 
 //}
 
 inline void CaliceROCDataCollector::BuildEvent_roc() {
-   //calculate the ahcal2bif offset if needed
-//   if (!m_offset_ahcal2bif_done) {
-//      if ((m_active_ahcal == false) || (m_active_bif == false)) {
-//         //we don't calculate offset if there are not 2 devices
-//         m_ts_offset_ahcal2bif = 0LL;
-//         m_offset_ahcal2bif_done = true;
-//         return;
-//      } else {
-//         //at this point all queues are not empty and not everybody is active
-//         if (!m_que_ahcal.front()->IsBORE() || !m_que_ahcal.front()->IsBORE()) {
-//            std::cout << "ERROR: events in ahcal and bif queues do not have BOER status" << std::endl;
-//            EUDAQ_THROW("the first event is not bore");
-//         }
-//         uint64_t start_ts_cal = m_que_ahcal.front()->GetTag("FirstROCStartTS", uint64_t(0));
-//         uint64_t start_ts_bif = m_que_bif.front()->GetTag("FirstROCStartTS", uint64_t(0));
-//         if ((start_ts_bif == 0LL) || (start_ts_cal == 0LL)) {
-//            std::cout << "ERROR: FirstROCStartTS tags are not defined for both ahcal and bif events" << std::endl;
-//         }
-//         m_ts_offset_ahcal2bif = (start_ts_cal << 5) - start_ts_bif;
-//         m_offset_ahcal2bif_done = true;
-//         // std::cout<<"start_ts_bif "<< start_ts_bif <<std::endl;
-//         // std::cout<<"start_ts_cal "<< start_ts_cal <<std::endl;
-//         // std::cout<<"offset "<< m_ts_offset_cal2bif <<std::endl;
-//      }
-//   }
-   std::lock_guard<std::mutex> lock(m_mutex); //only 1 process should be allowed to make events
    while (true) {
       SetStatusTag("Queue", std::string("(") + std::to_string(m_que_ahcal.size())
             + "," + std::to_string(m_que_ecal.size())
@@ -268,7 +245,6 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
          }
          roc_ahcal += m_roc_offset_ahcal;
       }
-
       if (m_que_ecal.empty()) {
          if (m_active_ecal) return; //more will come
       } else {
@@ -281,7 +257,6 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
          }
          roc_ecal += m_roc_offset_ahcal;
       }
-
       if (m_que_bif.empty()) {
          if (m_active_bif) return; //more will come
       } else {
@@ -314,7 +289,6 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
       // std::cout << "\tAHCALROC=" << roc_ahcal << ",AHCALBXID=" << bxid_ahcal << "\tBIFROC=" << roc_bif << ",BIFBXID=" << bxid_bif;
       // std::cout << "\tH1ROC=" << roc_hodoscope1 << ",H1BXID=" << bxid_hodoscope1;
       // std::cout << "\tH2ROC=" << roc_hodoscope2 << ",H2BXID=" << bxid_hodoscope2 << std::endl;
-
       auto ev_sync = eudaq::Event::MakeUnique("CaliceRoc");
       ev_sync->SetFlagPacket();
       uint64_t timestampBegin, timestampEnd;
@@ -326,7 +300,6 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
             present_bif = true;
          }
       }
-
       if (roc_ecal == processedRoc) {
          if (!m_que_ecal.empty()) {
             ev_sync->AddSubEvent(std::move(m_que_ecal.front()));
@@ -334,7 +307,6 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
             present_ecal = true;
          }
       }
-
       if (!m_que_desytable.empty()) {
          ev_sync->AddSubEvent(std::move(m_que_desytable.front()));
          m_que_desytable.pop_front();
@@ -343,12 +315,12 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
       //Reordered: AHCAL should go last: the last events overwrites the timestamp in slcio
       if (roc_ahcal == processedRoc) {
          if (!m_que_ahcal.empty()) {
-            ev_sync->AddSubEvent(std::move(m_que_ahcal.front()));
-            m_que_ahcal.pop_front();
-            present_ahcal = true;
             timestampBegin = m_que_ahcal.front()->GetTimestampBegin();
             timestampEnd = m_que_ahcal.front()->GetTimestampEnd();
             ev_sync->SetTimestamp(timestampBegin, timestampEnd);
+            ev_sync->AddSubEvent(std::move(m_que_ahcal.front()));
+            m_que_ahcal.pop_front();
+            present_ahcal = true;
          }
       }
       m_thrown_incomplete += 1; //increase in case the loop is exit in following lines
