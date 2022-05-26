@@ -124,7 +124,7 @@ namespace eudaq {
 	  string colName((char *) &bl0.front(), bl0.size());
 	  
 	  auto bl1 = rawev->GetBlock(nblock++);
-	  string dataDesc;((char *) &bl1.front(), bl1.size());
+	  string dataDesc((char *) &bl1.front(), bl1.size());
 	  
 	  // EUDAQ TIMESTAMP, saved in ScReader.cc
 	  auto bl2 = rawev->GetBlock(nblock++);
@@ -241,6 +241,9 @@ namespace eudaq {
 
 	   int ROC = rawev->GetTag("ROC",-1);
 	   result.parameters().setValue("SiECAL_CycleID", ROC);
+
+	   int BXID = rawev->GetTag("BXID",-1);
+           result.parameters().setValue("SiECAL_BXID", BXID);
 
             //-------------------
             // READ/WRITE SlowControl data
