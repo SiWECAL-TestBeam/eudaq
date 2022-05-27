@@ -209,12 +209,7 @@ bool CaliceCommonRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, euda
   int nsubevents=ev->GetNumSubEvent();
   std::cout<<" EOEOE1 "<<nsubevents<<std::endl;
   
-  /*  if (ev->IsFlagFake()) {
-      EUDAQ_WARN("Receive event fake");
-      return true;
-      }*/
-
-  
+ 
   // predefine the planes
   std::vector<int> HBUHits;
   std::vector<std::array<int, planesXsize * planesYsize>> HBUs;         //HBU(aka plane) index, x*12+y
@@ -262,57 +257,57 @@ bool CaliceCommonRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, euda
   
   for(int isub=0; isub<nsubevents; isub++) {
     auto subev=ev->GetSubEvent(isub);
-    
+        
     auto bl0 = subev->GetBlock(0);
     std::string colName((char *) &bl0.front(), bl0.size());
     std::cout<<" EOEOE "<<isub<<" "<<colName<<std::endl;
   
      
-    if (colName == "EUDAQDataScCAL") {
-      ScCALConverting(subev,HBUHits,HBUs);
-    }
-    if (colName == "EUDAQDataSiECAL") {
+    // if (colName == "EUDAQDataScCAL") {
+    //   ScCALConverting(subev,HBUHits,HBUs);
+    // }
+    if (colName == "EUDAQDataSiECAL" || colName == "EUDAQDataScCAL") {
       SiECALConverting(subev,SLABHits,SLABs);
     }
+  }
+  for (int i = 0; i <  SLABs.size(); ++i) {
+    std::string sensor=sensortype;
+    if(planesXsize_siecal>1000) sensor=sensortype2;
+    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceCommonObject", sensor));
+    int pixindex = 0;
+    plane->SetSizeZS(planesXsize_siecal, planesYsize_siecal, SLABHits[i], 1, 0);
     
-    for (int i = 0; i <  SLABs.size(); ++i) {
-      std::string sensor=sensortype;
-      if(planesXsize_siecal>1000) sensor=sensortype2;
-      std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceCommonObject", sensor));
-      int pixindex = 0;
-      plane->SetSizeZS(planesXsize_siecal, planesYsize_siecal, SLABHits[i], 1, 0);
-      
-      for (int x = 0; x < planesXsize_siecal; x++) {
-	for (int y = 0; y < planesYsize_siecal; y++) {
-	  //	    std::cout<<"y:"<<y<<" "<<planesYsize_siecal<<std::endl;
+    for (int x = 0; x < planesXsize_siecal; x++) {
+      for (int y = 0; y < planesYsize_siecal; y++) {
+	//	    std::cout<<"y:"<<y<<" "<<planesYsize_siecal<<std::endl;
 	if (SLABs[i][x * planesYsize_siecal + y] > 0 ) {
 	  plane->SetPixel(pixindex++, x, y, SLABs[i][x * planesYsize_siecal + y]);
 	  //std::cout<<"fill planes: "<<i<<" "<<x<<" "<<y<<SLABs[i][x * planesYsize_siecal + y]<<std::endl;
 	}
-	}
       }
-      
-      d2->AddPlane(*plane);
     }
     
-    for (int i = 0; i <  HBUs.size(); ++i) {
-      std::string sensor=sensortype;
-      if(planesXsize_siecal>1000) sensor=sensortype2;
-      std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i+planeCount_siecal, "CaliceCommonObject", sensor));
-      int pixindex = 0;
-      plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
-      for (int x = 0; x < planesXsize; x++) {
-	for (int y = 0; y < planesYsize; y++) {
-	  if (HBUs[i][x * planesYsize + y] >= 0 ) {
-	    plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesYsize + y]);
-	  }
-	}
-      }
-   
-      d2->AddPlane(*plane);
-    }
-    
+    d2->AddPlane(*plane);
   }
+  
+  for (int i = 0; i <  HBUs.size(); ++i) {
+    std::string sensor=sensortype;
+    if(planesXsize_siecal>1000) sensor=sensortype2;
+    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i+planeCount_siecal, "CaliceCommonObject", sensor));
+    int pixindex = 0;
+    plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
+    for (int x = 0; x < planesXsize; x++) {
+      for (int y = 0; y < planesYsize; y++) {
+	if (HBUs[i][x * planesYsize + y] >= 0 ) {
+	  plane->SetPixel(pixindex++, x, y, HBUs[i][x * planesYsize + y]);
+	}
+      }
+    }
+    
+    d2->AddPlane(*plane);
+  }
+    
+ 
   
   return true;
 
@@ -371,20 +366,25 @@ int CaliceCommonRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid,
 
 void CaliceCommonRawEvent2StdEventConverter::ScCALConverting(eudaq::EventSPC d1, std::vector<int> &HBUHits, std::vector<std::array<int, planesXsize * planesYsize>> &HBUs) const{
 
-    auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
-    size_t nblocks = ev->NumBlocks();
-    std::cout<<nblocks<<std::endl;
+  auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
+  size_t nblocks = ev->NumBlocks();
+  std::cout<<nblocks<<std::endl;
+  
+  unsigned int nblock =10; // the first 10 blocks contain other information
+  // std::cout << ev->GetEventNumber() << "<" << std::flush;
+  std::cout<<"nblocks:"<<nblocks<<std::endl;
+  std::cout<<"ROC:"<<ev->GetTag("ROC",-1)<<std::endl;
+  
+  while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
+    std::cout<<"  -- nblock:"<<nblock<<std::endl;
+    std::vector<int> data;
+    std::cout<<"4"<<std::endl;
+    const auto & bl = ev->GetBlock(nblock++);
+    data.resize(bl.size() / sizeof(int));
+    memcpy(&data[0], &bl[0], bl.size());
+    if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
 
-    unsigned int nblock = 10; // the first 10 blocks contain other information
-    // std::cout << ev->GetEventNumber() << "<" << std::flush;
-
-    while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
-      std::vector<int> data;
-      const auto & bl = ev->GetBlock(nblock++);
-      data.resize(bl.size() / sizeof(int));
-      memcpy(&data[0], &bl[0], bl.size());
-      if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
-      int dummy=ev->GetTag("Dummy", 0);
+    //   int dummy=ev->GetTag("Dummy", 0);
       //data structure of packet: data[i]=
       //i=0 --> cycleNr
       //i=1 --> bunch crossing id
@@ -396,49 +396,52 @@ void CaliceCommonRawEvent2StdEventConverter::ScCALConverting(eudaq::EventSPC d1,
       //debug prints:
       //std:cout << "Data_" << data[0] << "_" << data[1] << "_" << data[2] << "_" << data[3] << "_" << data[4] << "_" << data[5] << std::endl;
       //      if (data[1] == 0) continue; //don't store dummy trigger
-      if(dummy==1) continue;//don't store dummy trigger
+      //  if(dummy==1) continue;//don't store dummy trigger
       int chipid = data[3];
+      std::cout<<"9"<<std::endl;
       int planeNumber = planeCount_siecal+getPlaneNumberFromCHIPID(chipid);
-      //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
+      printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
       int bcid = data[1];
       int sca = data[2];
 
       if (planeNumber >= 0) {
-	//if (HBUs[planeNumber][coordIndex] >= 0) // std::cout << "ERROR: channel already has a value" << std::endl;
-	//else {
-	if(planesXsize_siecal>1000) {
-	  int coorx=bcid;
-	  int coory= sca;
-	  int coordIndex = coorx * planesYsize + coory;
-	  if (HBUs[planeNumber][coordIndex] <0) {
-	    HBUs[planeNumber][coordIndex] = 1;
-	    if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-	    HBUHits[planeNumber]++;
-	  }
-	} else {
-	  for (int ichan = 0; ichan < data[4]; ichan++) {
-	    int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
-	    int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
-	    int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
-	    if (hitbit) {
-	      if (adc < pedestalLimit) continue;
-	      //get the index from the HBU array
-	      //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
-	      int coorx = getXcoordFromChipChannel(chipid, ichan);
-	      int coory = getYcoordFromChipChannel(chipid, ichan);
-	      //testbeam view: side slab in the bottom, electronics facing beam line:
-	      //int coory = getXcoordFromChipChannel(chipid, ichan);
-	      //int coorx = planesYsize - getYcoordFromChipChannel(chipid, ichan) - 1;
-	      
-	      int coordIndex = coorx * planesXsize + coory;
-	      if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-	      HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
-	      //HBUs[planeNumber][coordIndex] = 1;
-	      if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-	      HBUHits[planeNumber]++;
-	    }
-	  }
-	}
+    	//if (HBUs[planeNumber][coordIndex] >= 0) // std::cout << "ERROR: channel already has a value" << std::endl;
+    	//else {
+    	if(planesXsize_siecal>1000) {
+    	  int coorx=bcid;
+    	  int coory= sca;
+    	  int coordIndex = coorx * planesYsize + coory;
+    	  if (HBUs[planeNumber][coordIndex] <0) {
+    	    HBUs[planeNumber][coordIndex] = 1;
+    	    if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+    	    HBUHits[planeNumber]++;
+    	  }
+    	} else {
+    	  for (int ichan = 0; ichan < data[4]; ichan++) {
+    	    std::cout<<ichan<<std::endl;
+    	    int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
+    	    int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
+    	    int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
+    	    if (hitbit) {
+    	      if (adc < pedestalLimit) continue;
+    	      //get the index from the HBU array
+    	      //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
+    	      int coorx = getXcoordFromChipChannel(chipid, ichan);
+    	      int coory = getYcoordFromChipChannel(chipid, ichan);
+    	      //testbeam view: side slab in the bottom, electronics facing beam line:
+    	      //int coory = getXcoordFromChipChannel(chipid, ichan);
+    	      //int coorx = planesYsize - getYcoordFromChipChannel(chipid, ichan) - 1;
+    	      std::cout<<coorx<<" "<<coory<<" "<<adc<<" "<<planeNumber<<" "<<std::endl;
+    	      int coordIndex = coorx * planesXsize + coory;
+    	      if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
+    	      //HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
+    	      //HBUs[planeNumber][coordIndex] = 1;
+    	      if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+    	      HBUHits[planeNumber]++;
+    	    }
+    	  }
+    	}
+
       }//if plane number>=0
     }//while
     
@@ -478,6 +481,8 @@ void CaliceCommonRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1
     auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
     size_t nblocks = ev->NumBlocks();
 
+    
+    if(nblocks>(4+planeCount_siecal)) {
     //std::cout<<nblocks<<std::endl;
 
  
@@ -560,4 +565,5 @@ void CaliceCommonRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1
       }//planeNumber>=0
 
     }//while
+    }
 }
