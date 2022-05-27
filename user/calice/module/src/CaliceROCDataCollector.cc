@@ -289,8 +289,8 @@ inline void CaliceROCDataCollector::BuildEvent_roc() {
       // std::cout << "\tAHCALROC=" << roc_ahcal << ",AHCALBXID=" << bxid_ahcal << "\tBIFROC=" << roc_bif << ",BIFBXID=" << bxid_bif;
       // std::cout << "\tH1ROC=" << roc_hodoscope1 << ",H1BXID=" << bxid_hodoscope1;
       // std::cout << "\tH2ROC=" << roc_hodoscope2 << ",H2BXID=" << bxid_hodoscope2 << std::endl;
-      auto ev_sync = eudaq::Event::MakeUnique("CaliceRoc");
-      ev_sync->SetFlagPacket();
+      auto ev_sync = eudaq::Event::MakeUnique("CaliceCommonObject");
+      //ev_sync->SetFlagPacket();
       uint64_t timestampBegin, timestampEnd;
       //Reordered: BIF might need to go first, as it overwrites the slcio timestamp
       if (roc_bif == processedRoc) {

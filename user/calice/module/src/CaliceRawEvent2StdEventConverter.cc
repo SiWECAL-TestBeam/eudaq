@@ -11,7 +11,7 @@
 #define eventSizeLimit 1 //minimum size of the event which will be displayed
 
 //ahcal
-#define planeCount 0//number of ahcal layers
+#define planeCount 3//number of ahcal layers
 #define pedestalLimit 0 //minimum ahcal adc value, that will be displayed
 
 //siwecal
@@ -20,7 +20,7 @@
 //the problem is that the planes must be defined from the beginning, even if no data is received yet
 #define pedestalLimit_siecal 0
 
-//#define bcid_and_sca_monitoring
+#define bcid_and_sca_monitoring
 
 #ifdef bcid_and_sca_monitoring 
 //ahcal
