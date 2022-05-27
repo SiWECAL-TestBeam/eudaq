@@ -592,7 +592,7 @@ namespace eudaq {
       }
       //      cout<<"slabAdd:"<<slabAdd<<endl;
 
-      for(int isca=0; isca<sca; isca++) {
+      for(int isca=0; isca<sca+1; isca++) {
 	std::vector<int> cycledata;
 	cycledata.push_back((int) (cycleID));
 	cycledata.push_back((int) (bcid[isca]));
