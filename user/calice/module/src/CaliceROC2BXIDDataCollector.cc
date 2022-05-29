@@ -140,6 +140,7 @@ void CaliceROC2BCIDDataCollector::DoConfigure() {
    lastprinttime = std::chrono::system_clock::now();
    m_ldabxid0offset = conf->Get("LdaBxid0Offset", 285);
    m_ahcalBxidLength = conf->Get("AhcalBxidLength", 8);
+   m_require_LDAtrigger = conf->Get("RequireLdaTrigger", 0);
 }
 
 void CaliceROC2BCIDDataCollector::DoConnect(eudaq::ConnectionSPC idx) {
@@ -246,7 +247,7 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
    std::multimap<int, uint64_t> LdaTrigTSs;
    for (int i = 4; i < LDATSData.size(); i = i + 2) {
       uint64_t triggerTs = ((uint64_t) LDATSData[i] | ((uint64_t) LDATSData[i + 1] << 32));
-      int trigBxid = ldaTS2BXID(startTS, stopTS, m_ldabxid0offset, m_ahcalBxidLength);
+      int trigBxid = ldaTS2BXID(triggerTs, startTS, m_ldabxid0offset, m_ahcalBxidLength);
       if (triggerTs)
          LdaTrigTSs.insert( { trigBxid, triggerTs });
    }
@@ -285,7 +286,7 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
       nev->SetTag("ROCStartTS", startTS);
       nev->SetTag("ROC", evtROC);
       nev->SetTag("BXID", bxid);
-      nev->SetTimestamp(startTS+m_ldabxid0offset+bxid*m_ahcalBxidLength, startTS+m_ldabxid0offset+(bxid+1)*m_ahcalBxidLength, 1);
+      nev->SetTimestamp(startTS + m_ldabxid0offset + bxid * m_ahcalBxidLength, startTS + m_ldabxid0offset + (bxid + 1) * m_ahcalBxidLength, 1);
       std::vector<uint32_t> cycledata;
       cycledata.push_back((uint32_t) (startTS));
       cycledata.push_back((uint32_t) (startTS >> 32));
@@ -295,16 +296,19 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
       int matchingTriggers = 0;
       while (LdaTrigIt != LdaTrigTSs.end()) { //pick the first trigger TS for given bxid
          int trigBxid = LdaTrigIt->first;
-         triggerTs = LdaTrigIt->second;
          if (trigBxid > bxid) break;
          if (trigBxid < bxid) {
             LdaTrigIt++;
             continue;
          }
+         triggerTs = LdaTrigIt->second;
          matchingTriggers++;
+         LdaTrigIt++;
       }
+      if (m_require_LDAtrigger && (matchingTriggers == 0)) continue; //skip bxid events that are not validated
       cycledata.push_back((uint32_t) (triggerTs));
       cycledata.push_back((uint32_t) (triggerTs >> 32));
+      nev->SetTag("TrigBxidTdc", (int) (triggerTs - startTS - m_ldabxid0offset % m_ahcalBxidLength));
 
       if (matchingTriggers > 1) ErrorStatus |= DAQ_ERRORS_MISSING_START;
       if (bxid > lastValidBXID) ErrorStatus |= DAQ_ERRORS_INCOMPLETE;
