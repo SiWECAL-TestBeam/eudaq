@@ -230,7 +230,7 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
    int evtErrorStatus = ahcalEventROC->GetTag("DAQ_ERROR_STATUS", 0);
    uint64_t evtTBTimstamp = ahcalEventROC->GetTag("tbTimestamp", 0); //timestamp for reprocessing and setting the slcio date
    uint64_t evtStartTs = ahcalEventROC->GetTag("ROCStartTS", 0);
-
+   auto streamNr = ahcalEventROC->GetStreamN();
    auto block0 = ahcalEventROC->GetBlock(0); //"EUDAQDataScCAL";
    auto block1 = ahcalEventROC->GetBlock(1); //      s = "i:CycleNr,i:BunchXID,i:EvtNr,i:ChipID,i:NChannels,i:TDC14bit[NC],i:ADC14bit[NC]";
    auto block2 = ahcalEventROC->GetBlock(2); //unixtimestamp
@@ -269,6 +269,7 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
       int bxid = sameBxidPackets.first;
       eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
       eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
+      nev->SetStreamN(streamNr);
       int ErrorStatus = 0;
       if (!startTS) ErrorStatus |= DAQ_ERRORS_MISSING_START;
       if (!stopTS) ErrorStatus |= DAQ_ERRORS_MISSING_STOP;
@@ -284,33 +285,35 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
       nev->SetTag("ROCStartTS", startTS);
       nev->SetTag("ROC", evtROC);
       nev->SetTag("BXID", bxid);
+      nev->SetTimestamp(startTS+m_ldabxid0offset+bxid*m_ahcalBxidLength, startTS+m_ldabxid0offset+(bxid+1)*m_ahcalBxidLength, 1);
       std::vector<uint32_t> cycledata;
       cycledata.push_back((uint32_t) (startTS));
       cycledata.push_back((uint32_t) (startTS >> 32));
       cycledata.push_back((uint32_t) (stopTS));
       cycledata.push_back((uint32_t) (stopTS >> 32));
-      for (auto &minipacket : sameBxidPackets.second) {
-         if (minipacket.size()) {
-            nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(minipacket));
-         }
-      }
+      uint64_t triggerTs = 0ULL;
       int matchingTriggers = 0;
       while (LdaTrigIt != LdaTrigTSs.end()) { //pick the first trigger TS for given bxid
          int trigBxid = LdaTrigIt->first;
-         uint64_t triggerTs = LdaTrigIt->second;
+         triggerTs = LdaTrigIt->second;
          if (trigBxid > bxid) break;
          if (trigBxid < bxid) {
             LdaTrigIt++;
             continue;
          }
          matchingTriggers++;
-         cycledata.push_back((uint32_t) (triggerTs));
-         cycledata.push_back((uint32_t) (triggerTs >> 32));
       }
+      cycledata.push_back((uint32_t) (triggerTs));
+      cycledata.push_back((uint32_t) (triggerTs >> 32));
 
       if (matchingTriggers > 1) ErrorStatus |= DAQ_ERRORS_MISSING_START;
       if (bxid > lastValidBXID) ErrorStatus |= DAQ_ERRORS_INCOMPLETE;
       nev_raw->AppendBlock(6, std::move(cycledata));
+      for (auto &minipacket : sameBxidPackets.second) {
+         if (minipacket.size()) {
+            nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(minipacket));
+         }
+      }
       nev->SetTag("DAQ_ERROR_STATUS", ErrorStatus);
       nev->SetTag("tbTimestamp", evtTBTimstamp);
       queue_bxid.push_back(std::move(nev));
