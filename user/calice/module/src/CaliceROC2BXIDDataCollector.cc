@@ -308,7 +308,7 @@ void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &que
       if (m_require_LDAtrigger && (matchingTriggers == 0)) continue; //skip bxid events that are not validated
       cycledata.push_back((uint32_t) (triggerTs));
       cycledata.push_back((uint32_t) (triggerTs >> 32));
-      nev->SetTag("TrigBxidTdc", (int) (triggerTs - startTS - m_ldabxid0offset % m_ahcalBxidLength));
+      nev->SetTag("TrigBxidTdc", (int) ((triggerTs - startTS - m_ldabxid0offset) % m_ahcalBxidLength));
 
       if (matchingTriggers > 1) ErrorStatus |= DAQ_ERRORS_MISSING_START;
       if (bxid > lastValidBXID) ErrorStatus |= DAQ_ERRORS_INCOMPLETE;
