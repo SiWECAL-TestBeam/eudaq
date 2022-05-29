@@ -22,6 +22,13 @@
 #include "eudaq/Platform.hh"
 #include "eudaq/Factory.hh"
 
+#define DAQ_ERRORS_INCOMPLETE        0x0001
+#define DAQ_ERRORS_OUTSIDE_ACQ       0x0002
+#define DAQ_ERRORS_MULTIPLE_TRIGGERS 0x0004
+#define DAQ_ERRORS_MISSED_DUMMY      0x0008
+#define DAQ_ERRORS_MISSING_START     0x0010
+#define DAQ_ERRORS_MISSING_STOP      0x0020
+
 using namespace eudaq;
 using DataCollectorSP = Factory<DataCollector>::SP_BASE;
 
@@ -38,11 +45,15 @@ class CaliceROC2BCIDDataCollector: public eudaq::DataCollector {
 
    private:
       void AddEvent_TimeStamp(uint32_t id, eudaq::EventSPC ev);
-      void BuildEvent_roc();
+      void BuildEvent_roc_bxid();
+
       void AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &queue_roc, std::deque<eudaq::EventSPC> &queue_bxid);
       std::vector<uint32_t> vectorU8toU32(const std::vector<uint8_t> &data);
-      int m_ldabxid0offset = 0;
+      inline int ldaTS2BXID(const uint64_t triggerTS, const uint64_t startTS, const int bxid0TSOffer, const int bxidLength);
+
+      int m_ldabxid0offset = 285;
       int m_ahcalBxidLength = 8;
+      int m_require_LDAtrigger = 0;
 
       std::mutex m_mutex;
       //to be edited according to the name of the processes. TODO implement as parameter to the configuration
@@ -127,6 +138,8 @@ void CaliceROC2BCIDDataCollector::DoConfigure() {
    m_disable_print = conf->Get("DISABLE_PRINT", 1) == 1 ? true : false;
    std::cout << "#MandatoryBif=" << MandatoryBif << std::endl;
    lastprinttime = std::chrono::system_clock::now();
+   m_ldabxid0offset = conf->Get("LdaBxid0Offset", 285);
+   m_ahcalBxidLength = conf->Get("AhcalBxidLength", 8);
 }
 
 void CaliceROC2BCIDDataCollector::DoConnect(eudaq::ConnectionSPC idx) {
@@ -190,16 +203,15 @@ void CaliceROC2BCIDDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::Eve
       EUDAQ_WARN("Receive event from unkonwn Producer");
       return;
    }
-
    while (!m_que_ahcal_ROC.empty())
-      AhcalRoc2Bxid(m_que_ahcal_ROC, m_que_bif_BXID);
+      AhcalRoc2Bxid(m_que_ahcal_ROC, m_que_ahcal_BXID);
 
    //quit if not enough events to merge
-   if (m_que_ahcal_ROC.empty() && m_active_ahcal) return;
-   if (m_que_ecal_ROC.empty() && m_active_ecal) return;
-   if (m_que_bif_ROC.empty() && m_active_bif) return;
+   if (m_que_ahcal_BXID.empty() && m_active_ahcal) return;
+   if (m_que_ecal_BXID.empty() && m_active_ecal) return;
+   if (m_que_bif_BXID.empty() && m_active_bif) return;
+   BuildEvent_roc_bxid();
 // std::cout<<"p 1 \n";
-   BuildEvent_roc();
 }
 
 std::vector<uint32_t> CaliceROC2BCIDDataCollector::vectorU8toU32(const std::vector<uint8_t> &data) {
@@ -208,28 +220,106 @@ std::vector<uint32_t> CaliceROC2BCIDDataCollector::vectorU8toU32(const std::vect
    return std::vector<uint32_t>(ptr, ptr + data.size() / 4);
 }
 
+inline int CaliceROC2BCIDDataCollector::ldaTS2BXID(const uint64_t triggerTS, const uint64_t startTS, const int bxid0TSOffer, const int bxidLength) {
+   return (triggerTS - startTS - bxid0TSOffer) / bxidLength;
+}
+
 void CaliceROC2BCIDDataCollector::AhcalRoc2Bxid(std::deque<eudaq::EventSPC> &queue_roc, std::deque<eudaq::EventSPC> &queue_bxid) {
    eudaq::EventSPC ahcalEventROC = queue_roc.front();
-   std::vector<uint32_t> cycleData = vectorU8toU32(ahcalEventROC->GetBlock(6));
-   std::map<uint32_t, uint64_t> LdaTrigBxidTs;
-   uint64_t startTs = ((uint64_t) cycleData[0] | ((uint64_t) cycleData[1] << 32));
-   uint64_t stoptTs = ((uint64_t) cycleData[2] | ((uint64_t) cycleData[3] << 32));
-   for (int i = 4; i < cycleData.size();) {
-      uint64_t triggerTs = ((uint64_t) cycleData[i] | ((uint64_t) cycleData[i + 1] << 32));
-      int trigBxid = (triggerTs - startTs - m_ldabxid0offset) / m_ahcalBxidLength;
-      if (triggerTs)
-         LdaTrigBxidTs.insert( { trigBxid, triggerTs });
-   }
-//   for (auto i : cycleData)
-//      std::cout << to_hex(i, 8) << " ";
-//   std::cout << std::endl;
-   eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
-   eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
+   int evtROC = ahcalEventROC->GetTag("ROC", -1);
+   int evtErrorStatus = ahcalEventROC->GetTag("DAQ_ERROR_STATUS", 0);
+   uint64_t evtTBTimstamp = ahcalEventROC->GetTag("tbTimestamp", 0); //timestamp for reprocessing and setting the slcio date
+   uint64_t evtStartTs = ahcalEventROC->GetTag("ROCStartTS", 0);
 
+   auto block0 = ahcalEventROC->GetBlock(0); //"EUDAQDataScCAL";
+   auto block1 = ahcalEventROC->GetBlock(1); //      s = "i:CycleNr,i:BunchXID,i:EvtNr,i:ChipID,i:NChannels,i:TDC14bit[NC],i:ADC14bit[NC]";
+   auto block2 = ahcalEventROC->GetBlock(2); //unixtimestamp
+   auto block3 = ahcalEventROC->GetBlock(3); // dummy block to be filled later with slowcontrol files
+   auto block4 = ahcalEventROC->GetBlock(4); // dummy block to be filled later with LED information (only if LED run)
+   auto block5 = ahcalEventROC->GetBlock(5); // dummy block to be filled later with temperature
+   std::vector<uint32_t> LDATSData = vectorU8toU32(ahcalEventROC->GetBlock(6)); //lda timestamps
+   auto block7 = ahcalEventROC->GetBlock(7); //stopping bxids
+   auto block8 = ahcalEventROC->GetBlock(8); //hv adjust
+   auto block9 = ahcalEventROC->GetBlock(9); //future
+   uint64_t startTS = ((uint64_t) LDATSData[0] | ((uint64_t) LDATSData[1] << 32));
+   uint64_t stopTS = ((uint64_t) LDATSData[2] | ((uint64_t) LDATSData[3] << 32));
+   std::multimap<int, uint64_t> LdaTrigTSs;
+   for (int i = 4; i < LDATSData.size(); i = i + 2) {
+      uint64_t triggerTs = ((uint64_t) LDATSData[i] | ((uint64_t) LDATSData[i + 1] << 32));
+      int trigBxid = ldaTS2BXID(startTS, stopTS, m_ldabxid0offset, m_ahcalBxidLength);
+      if (triggerTs)
+         LdaTrigTSs.insert( { trigBxid, triggerTs });
+   }
+   int lastValidBXID = 65535; //the lowest bxid in memory cells 15 (the last) in the whole detector
+   std::map<int, std::vector<std::vector<uint32_t> > > bxids; //map <bxid,vector<asicpackets>>
+   for (int numblock = 10; numblock < ahcalEventROC->GetNumBlock(); numblock++) {
+      //structure of AHCAL block: [0]=_cycle_no, [1]=bxid, [2]=memcell, [3]=chipid, [4]=nchannel, [5..(5+36-1)]=TDC, [(5+36)..(5+72-1)]=ADC
+      std::vector<uint32_t> block = vectorU8toU32(ahcalEventROC->GetBlock(numblock));
+      // std::cout << "numblock=" << numblock << ", size=" << block.size() << std::endl;
+      int blockBXID = block[1];
+      //std::cout << std::endl << "blockBXID=" << blockBXID << std::endl;
+      int blockMemCell = block[2];
+      //std::cout << std::endl << "blockMemCell=" << blockMemCell << std::endl;
+      if ((blockMemCell == 15) && (blockBXID < lastValidBXID)) lastValidBXID = blockBXID;
+      std::vector<std::vector<uint32_t> > &sameBxidPackets = bxids.insert( { blockBXID, std::vector<std::vector<uint32_t> >() }).first->second;
+      sameBxidPackets.push_back(block);
+   }
+   std::multimap<int, uint64_t>::iterator LdaTrigIt = LdaTrigTSs.begin();
+   for (std::pair<const int, std::vector<std::vector<uint32_t> > > &sameBxidPackets : bxids) {
+      int bxid = sameBxidPackets.first;
+      eudaq::EventUP nev = eudaq::Event::MakeUnique("CaliceObject");
+      eudaq::RawEvent *nev_raw = dynamic_cast<RawEvent*>(nev.get());
+      int ErrorStatus = 0;
+      if (!startTS) ErrorStatus |= DAQ_ERRORS_MISSING_START;
+      if (!stopTS) ErrorStatus |= DAQ_ERRORS_MISSING_STOP;
+      nev_raw->AddBlock(0, block0);
+      nev_raw->AddBlock(1, block1);
+      nev_raw->AddBlock(2, block2);
+      nev_raw->AddBlock(3, block3);
+      nev_raw->AddBlock(4, block4);
+      nev_raw->AddBlock(5, block5);
+      nev_raw->AddBlock(7, block7);
+      nev_raw->AddBlock(8, block8);
+      nev_raw->AddBlock(9, block9);
+      nev->SetTag("ROCStartTS", startTS);
+      nev->SetTag("ROC", evtROC);
+      nev->SetTag("BXID", bxid);
+      std::vector<uint32_t> cycledata;
+      cycledata.push_back((uint32_t) (startTS));
+      cycledata.push_back((uint32_t) (startTS >> 32));
+      cycledata.push_back((uint32_t) (stopTS));
+      cycledata.push_back((uint32_t) (stopTS >> 32));
+      for (auto &minipacket : sameBxidPackets.second) {
+         if (minipacket.size()) {
+            nev_raw->AddBlock(nev_raw->NumBlocks(), std::move(minipacket));
+         }
+      }
+      int matchingTriggers = 0;
+      while (LdaTrigIt != LdaTrigTSs.end()) { //pick the first trigger TS for given bxid
+         int trigBxid = LdaTrigIt->first;
+         uint64_t triggerTs = LdaTrigIt->second;
+         if (trigBxid > bxid) break;
+         if (trigBxid < bxid) {
+            LdaTrigIt++;
+            continue;
+         }
+         matchingTriggers++;
+         cycledata.push_back((uint32_t) (triggerTs));
+         cycledata.push_back((uint32_t) (triggerTs >> 32));
+      }
+
+      if (matchingTriggers > 1) ErrorStatus |= DAQ_ERRORS_MISSING_START;
+      if (bxid > lastValidBXID) ErrorStatus |= DAQ_ERRORS_INCOMPLETE;
+      nev_raw->AppendBlock(6, std::move(cycledata));
+      nev->SetTag("DAQ_ERROR_STATUS", ErrorStatus);
+      nev->SetTag("tbTimestamp", evtTBTimstamp);
+      queue_bxid.push_back(std::move(nev));
+
+   }
    queue_roc.pop_front();
 }
 
-inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
+inline void CaliceROC2BCIDDataCollector::BuildEvent_roc_bxid() {
 
    while (true) {
       SetStatusTag("Queue", std::string("(") + std::to_string(m_que_ahcal_ROC.size())
@@ -252,6 +342,10 @@ inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
       int roc_ahcal = mc_roc_invalid;
       int roc_ecal = mc_roc_invalid;
       int roc_bif = mc_roc_invalid;
+
+      int bxid_ahcal = mc_bxid_invalid;
+      int bxid_ecal = mc_bxid_invalid;
+      int bxid_bif = mc_bxid_invalid;
 //      const eudaq::EventSP ev_front_cal;
 //      const eudaq::EventSP ev_front_bif;
 
@@ -262,38 +356,44 @@ inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
 //      uint64_t ts_beg = UINT64_C(0); //timestamps in 0.78125 ns steps
 //      uint64_t ts_end = UINT64_C(0); //timestamps in 0.78125 ns steps
 
-      if (m_que_ahcal_ROC.empty()) {
+      if (m_que_ahcal_BXID.empty()) {
          if (m_active_ahcal) return; //more will come
       } else {
-         roc_ahcal = m_que_ahcal_ROC.front()->GetTag("ROC", mc_roc_invalid);
-         if ((roc_ahcal == mc_roc_invalid)) {
-            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_ahcal_ROC.front()->GetEventN()) + " without AHCAL ROC("
-                  + std::to_string(roc_ahcal) + ") in run " + std::to_string(m_que_ahcal_ROC.front()->GetRunNumber()), std::cout, std::cerr);
-            m_que_ahcal_ROC.pop_front();
+         roc_ahcal = m_que_ahcal_BXID.front()->GetTag("ROC", mc_roc_invalid);
+         bxid_ahcal = m_que_ahcal_BXID.front()->GetTag("BXID", mc_bxid_invalid);
+         if ((roc_ahcal == mc_roc_invalid) || (bxid_ahcal == mc_bxid_invalid)) {
+            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_ahcal_BXID.front()->GetEventN()) + " without AHCAL ROC(" + ") or BXID("
+                  + std::to_string(bxid_ahcal) + std::to_string(roc_ahcal) + ") in run " + std::to_string(m_que_ahcal_BXID.front()->GetRunNumber()), std::cout,
+                  std::cerr);
+            m_que_ahcal_BXID.pop_front();
             continue;
          }
          roc_ahcal += m_roc_offset_ahcal;
       }
-      if (m_que_ecal_ROC.empty()) {
+      if (m_que_ecal_BXID.empty()) {
          if (m_active_ecal) return; //more will come
       } else {
-         roc_ecal = m_que_ecal_ROC.front()->GetTag("ROC", mc_roc_invalid);
-         if ((roc_ecal == mc_roc_invalid)) {
-            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_ecal_ROC.front()->GetEventN()) + " without ECAL ROC("
-                  + std::to_string(roc_ecal) + ") in run " + std::to_string(m_que_ecal_ROC.front()->GetRunNumber()), std::cout, std::cerr);
-            m_que_ecal_ROC.pop_front();
+         roc_ecal = m_que_ecal_BXID.front()->GetTag("ROC", mc_roc_invalid);
+         bxid_ecal = m_que_ecal_BXID.front()->GetTag("BXID", mc_bxid_invalid);
+         if ((roc_ecal == mc_roc_invalid) || (bxid_ecal == mc_roc_invalid)) {
+            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_ecal_BXID.front()->GetEventN()) + " without ECAL ROC(" + ") or BXID("
+                  + std::to_string(bxid_ecal) + std::to_string(roc_ecal) + ") in run " + std::to_string(m_que_ecal_BXID.front()->GetRunNumber()),
+                  std::cout, std::cerr);
+            m_que_ecal_BXID.pop_front();
             continue;
          }
          roc_ecal += m_roc_offset_ahcal;
       }
-      if (m_que_bif_ROC.empty()) {
+      if (m_que_bif_BXID.empty()) {
          if (m_active_bif) return; //more will come
       } else {
-         roc_bif = m_que_bif_ROC.front()->GetTag("ROC", mc_roc_invalid);
-         if ((roc_bif == mc_roc_invalid)) {
-            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_bif_ROC.front()->GetEventN()) + " without BIF ROC(" + std::to_string(roc_bif)
-                  + ") in run " + std::to_string(m_que_bif_ROC.front()->GetRunNumber()), std::cout, std::cerr);
-            m_que_bif_ROC.pop_front();
+         roc_bif = m_que_bif_BXID.front()->GetTag("ROC", mc_roc_invalid);
+         bxid_bif = m_que_bif_BXID.front()->GetTag("BXID", mc_bxid_invalid);
+         if ((roc_bif == mc_roc_invalid) || (bxid_bif == mc_bxid_invalid)) {
+            EUDAQ_WARN_STREAMOUT("event " + std::to_string(m_que_bif_BXID.front()->GetEventN()) + " without BIF ROC(" + ") or BXID("
+                  + std::to_string(bxid_bif) + std::to_string(roc_bif) + ") in run " + std::to_string(m_que_bif_BXID.front()->GetRunNumber()), std::cout,
+                  std::cerr);
+            m_que_bif_BXID.pop_front();
             continue;
          }
          roc_bif += m_roc_offset_bif;
@@ -310,6 +410,10 @@ inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
       if (roc_ecal < processedRoc) processedRoc = roc_ecal;
       if (roc_bif < processedRoc) processedRoc = roc_bif;
 
+      int processedBxid = mc_bxid_invalid;
+      if ((roc_ahcal == processedRoc) && (bxid_ahcal < processedBxid)) processedBxid = bxid_ahcal;
+      if ((roc_bif == processedRoc) && (bxid_bif < processedBxid)) processedBxid = bxid_bif;
+      if ((roc_ecal == processedRoc) && (bxid_ecal < processedBxid)) processedBxid = bxid_ecal;
 //      int processedBxid = mc_bxid_invalid;
 //      if ((roc_ahcal == processedRoc) && (bxid_ahcal < processedBxid)) processedBxid = bxid_ahcal;
 //      if ((roc_bif == processedRoc) && (bxid_bif < processedBxid)) processedBxid = bxid_bif;
@@ -318,21 +422,21 @@ inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
       // std::cout << "\tAHCALROC=" << roc_ahcal << ",AHCALBXID=" << bxid_ahcal << "\tBIFROC=" << roc_bif << ",BIFBXID=" << bxid_bif;
       // std::cout << "\tH1ROC=" << roc_hodoscope1 << ",H1BXID=" << bxid_hodoscope1;
       // std::cout << "\tH2ROC=" << roc_hodoscope2 << ",H2BXID=" << bxid_hodoscope2 << std::endl;
-      auto ev_sync = eudaq::Event::MakeUnique("CaliceRoc");
+      auto ev_sync = eudaq::Event::MakeUnique("CaliceBxid");
       ev_sync->SetFlagPacket();
       uint64_t timestampBegin, timestampEnd;
       //Reordered: BIF might need to go first, as it overwrites the slcio timestamp
-      if (roc_bif == processedRoc) {
-         if (!m_que_bif_ROC.empty()) {
-            ev_sync->AddSubEvent(std::move(m_que_bif_ROC.front()));
-            m_que_bif_ROC.pop_front();
+      if ((roc_bif == processedRoc) && (bxid_bif == processedBxid)) {
+         if (!m_que_bif_BXID.empty()) {
+            ev_sync->AddSubEvent(std::move(m_que_bif_BXID.front()));
+            m_que_bif_BXID.pop_front();
             present_bif = true;
          }
       }
-      if (roc_ecal == processedRoc) {
-         if (!m_que_ecal_ROC.empty()) {
-            ev_sync->AddSubEvent(std::move(m_que_ecal_ROC.front()));
-            m_que_ecal_ROC.pop_front();
+      if ((roc_ecal == processedRoc) && (bxid_ecal == processedBxid)) {
+         if (!m_que_ecal_BXID.empty()) {
+            ev_sync->AddSubEvent(std::move(m_que_ecal_BXID.front()));
+            m_que_ecal_BXID.pop_front();
             present_ecal = true;
          }
       }
@@ -342,13 +446,13 @@ inline void CaliceROC2BCIDDataCollector::BuildEvent_roc() {
          present_desytable = true;
       }
       //Reordered: AHCAL should go last: the last events overwrites the timestamp in slcio
-      if (roc_ahcal == processedRoc) {
-         if (!m_que_ahcal_ROC.empty()) {
-            timestampBegin = m_que_ahcal_ROC.front()->GetTimestampBegin();
-            timestampEnd = m_que_ahcal_ROC.front()->GetTimestampEnd();
+      if ((roc_ahcal == processedRoc) && (bxid_ahcal == processedBxid)) {
+         if (!m_que_ahcal_BXID.empty()) {
+            timestampBegin = m_que_ahcal_BXID.front()->GetTimestampBegin();
+            timestampEnd = m_que_ahcal_BXID.front()->GetTimestampEnd();
             ev_sync->SetTimestamp(timestampBegin, timestampEnd);
-            ev_sync->AddSubEvent(std::move(m_que_ahcal_ROC.front()));
-            m_que_ahcal_ROC.pop_front();
+            ev_sync->AddSubEvent(std::move(m_que_ahcal_BXID.front()));
+            m_que_ahcal_BXID.pop_front();
             present_ahcal = true;
          }
       }
