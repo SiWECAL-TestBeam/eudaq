@@ -5,6 +5,11 @@
 #include <set>
 #include <math.h>       /* fabs */
 
+#include "eudaq/Utils.hh"
+#include "eudaq/Event.hh"
+#include "eudaq/RawEvent.hh"
+
+
 #define debug 0
 
 class CaliceSiECALBxidDataCollector:public eudaq::DataCollector{
@@ -75,7 +80,7 @@ void CaliceSiECALBxidDataCollector::DoReceive(eudaq::ConnectionSPC id, eudaq::Ev
 
 
   //how do we deal with BORE s ?
-  if(id->GetName() == "SiWECALProducer"){
+  if(id->GetName() == "ECAL1"){
     //if(ev->IsBORE())
     //  m_ts_bore_cal = ev->GetTag("ROCStartTS", m_ts_bore_cal);
     m_que_siecal.push_back(ev);
@@ -131,10 +136,14 @@ void CaliceSiECALBxidDataCollector::DoReceive(eudaq::ConnectionSPC id, eudaq::Ev
 eudaq::EventUP CaliceSiECALBxidDataCollector::BxidEvent(int first, std::vector<std::vector<int>> second) {
 
   auto ev_siecal = m_que_siecal.front();
+  auto streamNr = ev_siecal->GetStreamN();
 
-  eudaq::EventUP ev_sub_siecal =  eudaq::Event::MakeUnique("CaliceObject");
+
+  eudaq::EventUP ev_sub_siecal =  eudaq::Event::MakeUnique("CaliceBxid");
   int nslabs=ev_siecal->GetTag("NSLBs",0);
+  eudaq::RawEvent *nev_raw = dynamic_cast<eudaq::RawEvent*>(ev_sub_siecal.get());
 
+  ev_sub_siecal->SetStreamN(streamNr);
   ev_sub_siecal->SetTag("ROC",ev_siecal->GetTag("ROC", -1));
   ev_sub_siecal->SetTag("NSLBs",ev_siecal->GetTag("NSLBs", -1));
   ev_sub_siecal->SetTag("SiECAL_StartAcqTime",ev_siecal->GetTag("SiECAL_StartAcqTime", -1)); // DOESN'T WORK -- to be checked
@@ -143,33 +152,33 @@ eudaq::EventUP CaliceSiECALBxidDataCollector::BxidEvent(int first, std::vector<s
   //copy all initial blocks
   auto bl0 = ev_siecal->GetBlock(0);
   std::string colName((char *) &bl0.front(), bl0.size());
-  ev_sub_siecal->AddBlock(0, colName.c_str(), colName.length());
+  nev_raw->AddBlock(0, colName.c_str(), colName.length());
   
   auto bl1 = ev_siecal->GetBlock(1);
   std::string coldesc((char *) &bl1.front(), bl1.size());
-  ev_sub_siecal->AddBlock(1, coldesc.c_str(), coldesc.length());
+  nev_raw->AddBlock(1, coldesc.c_str(), coldesc.length());
   
   auto bl2 = ev_siecal->GetBlock(2);
   std::vector<int> times;
   times.resize(bl2.size() / sizeof(int));
   memcpy(&times[0], &bl2[0], bl2.size());
-  ev_sub_siecal->AddBlock(2, bl2);//v, sizeof(v));
+  nev_raw->AddBlock(2, bl2);//v, sizeof(v));
   
   auto bl3 = ev_siecal->GetBlock(3);
   std::string colName2((char *) &bl3.front(), bl3.size());
-  ev_sub_siecal->AddBlock(3, colName2.c_str(), colName2.length());
+  nev_raw->AddBlock(3, colName2.c_str(), colName2.length());
   //copy all slowcontrol and info blocks
-  for(int iblock=4; iblock<(4+nslabs); iblock++) ev_sub_siecal->AddBlock(ev_sub_siecal->NumBlocks(),ev_siecal->GetBlock(iblock));
+  for(int iblock=4; iblock<(4+nslabs); iblock++) nev_raw->AddBlock(nev_raw->NumBlocks(),ev_siecal->GetBlock(iblock));
   int coincidences_per_layer[100]={0};
   for(int i=0; i<second.size(); i++) {
-    ev_sub_siecal->AddBlock(ev_sub_siecal->NumBlocks(),second.at(i));
+    nev_raw->AddBlock(nev_raw->NumBlocks(),second.at(i));
     coincidences_per_layer[int(second.at(i).at(3))]++;
   }
   int ncoincidences=0;
   for(int ilayer=0; ilayer<ev_siecal->GetTag("NSLBs", 0); ilayer ++)
     if(coincidences_per_layer[ilayer]>0) ncoincidences++;
 
-  ev_sub_siecal->SetTag("Layers_in_coincidence",ncoincidences);
+  nev_raw->SetTag("Layers_in_coincidence",ncoincidences);
 
   return ev_sub_siecal;
 }
