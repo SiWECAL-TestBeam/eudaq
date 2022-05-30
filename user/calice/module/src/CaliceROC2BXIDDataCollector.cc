@@ -219,8 +219,8 @@ void CaliceROC2BCIDDataCollector::DoReceive(eudaq::ConnectionSPC idx, eudaq::Eve
       EUDAQ_WARN("Receive event from unkonwn Producer");
       return;
    }
-   //   while (!m_que_ahcal_ROC.empty() )
-   //   AhcalRoc2Bxid(m_que_ahcal_ROC, m_que_ahcal_BXID);
+   while (!m_que_ahcal_ROC.empty() )
+     AhcalRoc2Bxid(m_que_ahcal_ROC, m_que_ahcal_BXID);
 
    while (!m_que_siecal_ROC.empty() )
       SiecalRoc2Bxid(m_que_siecal_ROC, m_que_siecal_BXID);
