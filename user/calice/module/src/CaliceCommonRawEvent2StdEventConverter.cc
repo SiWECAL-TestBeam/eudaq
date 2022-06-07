@@ -1,5 +1,7 @@
 #include "eudaq/StdEventConverter.hh"
 #include "eudaq/RawEvent.hh"
+#include <mutex>
+#include <deque>
 
 #ifdef _WIN32
 //TODO remove the _WIN32 if not necessary in linux
@@ -20,7 +22,7 @@
 //the problem is that the planes must be defined from the beginning, even if no data is received yet
 #define pedestalLimit_siecal 0
 
-#define bcid_and_sca_monitoring
+//#define bcid_and_sca_monitoring
 
 #ifdef bcid_and_sca_monitoring 
 //ahcal
@@ -42,12 +44,13 @@
 
 
 
-class CaliceRawEvent2StdEventConverter: public eudaq::StdEventConverter {
+class CaliceCommonRawEvent2StdEventConverter: public eudaq::StdEventConverter {
 public:
   bool Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const override;
-  static const uint32_t m_id_factory = eudaq::cstr2hash("CaliceObject");
+  static const uint32_t m_id_factory = eudaq::cstr2hash("CaliceCommonObject");
 
 private:
+
 
   //**********************siwecal
   // mapping
@@ -196,19 +199,18 @@ const int siwecal_I_bga[16][64]={
 
 namespace {
   auto dummy0 = eudaq::Factory<eudaq::StdEventConverter>::
-    Register<CaliceRawEvent2StdEventConverter>(CaliceRawEvent2StdEventConverter::m_id_factory);
+    Register<CaliceCommonRawEvent2StdEventConverter>(CaliceCommonRawEvent2StdEventConverter::m_id_factory);
 }
 
-bool CaliceRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const {
+bool CaliceCommonRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::StdEventSP d2, eudaq::ConfigSPC conf) const {
 
-
-  //  eudaq::StandardEvent& result = *(d2.get());
-  //auto result = std::dynamic_pointer_cast<const eudaq::StandardEvent>(d2);
+  std::cout<<" EOEOE0 "<<std::endl;
   auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
-
-  auto bl0 = ev->GetBlock(0);
-  std::string colName((char *) &bl0.front(), bl0.size());
-
+  int nsubevents=ev->GetNumSubEvent();
+  std::cout<<" EOEOE1 "<<nsubevents<<std::endl;
+  
+ 
+  // predefine the planes
   std::vector<int> HBUHits;
   std::vector<std::array<int, planesXsize * planesYsize>> HBUs;         //HBU(aka plane) index, x*12+y
   for (int i = 0; i < planeCount; ++i) {
@@ -217,7 +219,7 @@ bool CaliceRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::Std
     HBUs.push_back(HBU); //add the HBU to the HBU
     HBUHits.push_back(0);
   }
-  
+
   //siecal
   std::vector<int> SLABHits;
   std::vector<std::array<int, planesXsize_siecal * planesYsize_siecal>> SLABs;  
@@ -227,21 +229,51 @@ bool CaliceRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::Std
     SLABs.push_back(SLAB); //add the SLAB to the SLABs
     SLABHits.push_back(0);
   }
-  
-  if (colName == "EUDAQDataScCAL") {
-    ScCALConverting(d1,HBUHits,HBUs);
-  }
-  
-  if (colName == "EUDAQDataSiECAL") {
-    SiECALConverting(d1,SLABHits,SLABs);
-  }
+  //----------------------
 
+
+  if(nsubevents!=2) {
+    //Fill empty planes
+    for (int i = 0; i <  SLABs.size(); ++i) {
+      std::string sensor=sensortype;
+      if(planesXsize_siecal>1000) sensor=sensortype2;
+      std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceCommonObject", sensor));
+      int pixindex = 0;
+      plane->SetSizeZS(planesXsize_siecal, planesYsize_siecal, SLABHits[i], 1, 0);
+      d2->AddPlane(*plane);
+    }
+
+    for (int i = 0; i <  HBUs.size(); ++i) {
+      std::string sensor=sensortype;
+      if(planesXsize_siecal>1000) sensor=sensortype2;
+      std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i+planeCount_siecal, "CaliceCommonObject", sensor));
+      int pixindex = 0;
+      plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
+      d2->AddPlane(*plane);
+    }
+    
+    return true;
+  }
+  
+  for(int isub=0; isub<nsubevents; isub++) {
+    auto subev=ev->GetSubEvent(isub);
+        
+    auto bl0 = subev->GetBlock(0);
+    std::string colName((char *) &bl0.front(), bl0.size());
+    std::cout<<" EOEOE "<<isub<<" "<<colName<<std::endl;
+  
+     
+    // if (colName == "EUDAQDataScCAL") {
+    //   ScCALConverting(subev,HBUHits,HBUs);
+    // }
+    if (colName == "EUDAQDataSiECAL" || colName == "EUDAQDataScCAL") {
+      SiECALConverting(subev,SLABHits,SLABs);
+    }
+  }
   for (int i = 0; i <  SLABs.size(); ++i) {
-    //for (int i = 0; i <  SLABs.size(); ++i) {
-
     std::string sensor=sensortype;
     if(planesXsize_siecal>1000) sensor=sensortype2;
-    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceObject", sensor));
+    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i, "CaliceCommonObject", sensor));
     int pixindex = 0;
     plane->SetSizeZS(planesXsize_siecal, planesYsize_siecal, SLABHits[i], 1, 0);
     
@@ -250,20 +282,18 @@ bool CaliceRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::Std
 	//	    std::cout<<"y:"<<y<<" "<<planesYsize_siecal<<std::endl;
 	if (SLABs[i][x * planesYsize_siecal + y] > 0 ) {
 	  plane->SetPixel(pixindex++, x, y, SLABs[i][x * planesYsize_siecal + y]);
-	  
+	  //std::cout<<"fill planes: "<<i<<" "<<x<<" "<<y<<SLABs[i][x * planesYsize_siecal + y]<<std::endl;
 	}
       }
     }
     
     d2->AddPlane(*plane);
   }
-
+  
   for (int i = 0; i <  HBUs.size(); ++i) {
-    //for (int i = 0; i <  SLABs.size(); ++i) {
-
     std::string sensor=sensortype;
     if(planesXsize_siecal>1000) sensor=sensortype2;
-    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i+planeCount_siecal, "CaliceObject", sensor));
+    std::unique_ptr<eudaq::StandardPlane> plane(new eudaq::StandardPlane(i+planeCount_siecal, "CaliceCommonObject", sensor));
     int pixindex = 0;
     plane->SetSizeZS(planesXsize, planesYsize, HBUHits[i], 1, 0);
     for (int x = 0; x < planesXsize; x++) {
@@ -273,17 +303,19 @@ bool CaliceRawEvent2StdEventConverter::Converting(eudaq::EventSPC d1, eudaq::Std
 	}
       }
     }
-   
+    
     d2->AddPlane(*plane);
   }
-
+    
+ 
+  
   return true;
 
 
 }
 
 //************ AHCAL
-int CaliceRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const {
+int CaliceCommonRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const {
   //return (chipid >> 8);
   int module = (chipid >> 8);
   //   std::cout << " CHIP  " << chipid << " is in Module " << module << std::endl;
@@ -297,7 +329,7 @@ int CaliceRawEvent2StdEventConverter::getPlaneNumberFromCHIPID(int chipid) const
   //   return result;
 }
 
-int CaliceRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int channelNr) const {
+int CaliceCommonRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int channelNr) const {
   auto searchIterator = mapping.find(chipid & 0x0f);
   if (searchIterator == mapping.end()) return 0;
   auto asicXCoordBase = std::get<0>(searchIterator->second);
@@ -311,7 +343,7 @@ int CaliceRawEvent2StdEventConverter::getXcoordFromChipChannel(int chipid, int c
   //   return subx;
 }
 
-int CaliceRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid, int channelNr) const {
+int CaliceCommonRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid, int channelNr) const {
   auto searchIterator = mapping.find(chipid & 0x0f);
   if (searchIterator == mapping.end()) return 0;
   auto asicYCoordBase = std::get<1>(searchIterator->second);
@@ -332,22 +364,27 @@ int CaliceRawEvent2StdEventConverter::getYcoordFromChipChannel(int chipid, int c
   return suby;
 }
 
-void CaliceRawEvent2StdEventConverter::ScCALConverting(eudaq::EventSPC d1, std::vector<int> &HBUHits, std::vector<std::array<int, planesXsize * planesYsize>> &HBUs) const{
+void CaliceCommonRawEvent2StdEventConverter::ScCALConverting(eudaq::EventSPC d1, std::vector<int> &HBUHits, std::vector<std::array<int, planesXsize * planesYsize>> &HBUs) const{
 
-    auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
-    size_t nblocks = ev->NumBlocks();
+  auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
+  size_t nblocks = ev->NumBlocks();
+  std::cout<<nblocks<<std::endl;
+  
+  unsigned int nblock =10; // the first 10 blocks contain other information
+  // std::cout << ev->GetEventNumber() << "<" << std::flush;
+  std::cout<<"nblocks:"<<nblocks<<std::endl;
+  std::cout<<"ROC:"<<ev->GetTag("ROC",-1)<<std::endl;
+  
+  while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
+    std::cout<<"  -- nblock:"<<nblock<<std::endl;
+    std::vector<int> data;
+    std::cout<<"4"<<std::endl;
+    const auto & bl = ev->GetBlock(nblock++);
+    data.resize(bl.size() / sizeof(int));
+    memcpy(&data[0], &bl[0], bl.size());
+    if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
 
-
-    unsigned int nblock = 10; // the first 10 blocks contain other information
-    // std::cout << ev->GetEventNumber() << "<" << std::flush;
-
-    while ((nblock < ev->NumBlocks())&(nblocks > 7 + eventSizeLimit)) {         //iterate over all asic packets from (hopefully) same BXID
-      std::vector<int> data;
-      const auto & bl = ev->GetBlock(nblock++);
-      data.resize(bl.size() / sizeof(int));
-      memcpy(&data[0], &bl[0], bl.size());
-      if (data.size() != 77) std::cout << "vector has size : " << bl.size() << "\tdata : " << data.size() << std::endl;
-      int dummy=ev->GetTag("Dummy", 0);
+    //   int dummy=ev->GetTag("Dummy", 0);
       //data structure of packet: data[i]=
       //i=0 --> cycleNr
       //i=1 --> bunch crossing id
@@ -359,66 +396,69 @@ void CaliceRawEvent2StdEventConverter::ScCALConverting(eudaq::EventSPC d1, std::
       //debug prints:
       //std:cout << "Data_" << data[0] << "_" << data[1] << "_" << data[2] << "_" << data[3] << "_" << data[4] << "_" << data[5] << std::endl;
       //      if (data[1] == 0) continue; //don't store dummy trigger
-      if(dummy==1) continue;//don't store dummy trigger
+      //  if(dummy==1) continue;//don't store dummy trigger
       int chipid = data[3];
+      std::cout<<"9"<<std::endl;
       int planeNumber = planeCount_siecal+getPlaneNumberFromCHIPID(chipid);
-      //printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
+      printf("ChipID %04x: plane=%d\n", chipid, planeNumber);
       int bcid = data[1];
       int sca = data[2];
 
       if (planeNumber >= 0) {
-	//if (HBUs[planeNumber][coordIndex] >= 0) // std::cout << "ERROR: channel already has a value" << std::endl;
-	//else {
-	if(planesXsize_siecal>1000) {
-	  int coorx=bcid;
-	  int coory= sca;
-	  int coordIndex = coorx * planesYsize + coory;
-	  if (HBUs[planeNumber][coordIndex] <0) {
-	    HBUs[planeNumber][coordIndex] = 1;
-	    if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-	    HBUHits[planeNumber]++;
-	  }
-	} else {
-	  for (int ichan = 0; ichan < data[4]; ichan++) {
-	    int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
-	    int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
-	    int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
-	    if (hitbit) {
-	      if (adc < pedestalLimit) continue;
-	      //get the index from the HBU array
-	      //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
-	      int coorx = getXcoordFromChipChannel(chipid, ichan);
-	      int coory = getYcoordFromChipChannel(chipid, ichan);
-	      //testbeam view: side slab in the bottom, electronics facing beam line:
-	      //int coory = getXcoordFromChipChannel(chipid, ichan);
-	      //int coorx = planesYsize - getYcoordFromChipChannel(chipid, ichan) - 1;
-	      
-	      int coordIndex = coorx * planesXsize + coory;
-	      if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
-	      HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
-	      //HBUs[planeNumber][coordIndex] = 1;
-	      if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
-	      HBUHits[planeNumber]++;
-	    }
-	  }
-	}
+    	//if (HBUs[planeNumber][coordIndex] >= 0) // std::cout << "ERROR: channel already has a value" << std::endl;
+    	//else {
+    	if(planesXsize_siecal>1000) {
+    	  int coorx=bcid;
+    	  int coory= sca;
+    	  int coordIndex = coorx * planesYsize + coory;
+    	  if (HBUs[planeNumber][coordIndex] <0) {
+    	    HBUs[planeNumber][coordIndex] = 1;
+    	    if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+    	    HBUHits[planeNumber]++;
+    	  }
+    	} else {
+    	  for (int ichan = 0; ichan < data[4]; ichan++) {
+    	    std::cout<<ichan<<std::endl;
+    	    int adc = data[5 + data[4] + ichan] & 0x0FFF; // extract adc
+    	    int gainbit = (data[5 + data[4] + ichan] & 0x2000) ? 1 : 0; //extract gainbit
+    	    int hitbit = (data[5 + data[4] + ichan] & 0x1000) ? 1 : 0;  //extract hitbit
+    	    if (hitbit) {
+    	      if (adc < pedestalLimit) continue;
+    	      //get the index from the HBU array
+    	      //standart view: 1st hbu in upper right corner, asics facing to the viewer, tiles in the back. Dit upper right corner:
+    	      int coorx = getXcoordFromChipChannel(chipid, ichan);
+    	      int coory = getYcoordFromChipChannel(chipid, ichan);
+    	      //testbeam view: side slab in the bottom, electronics facing beam line:
+    	      //int coory = getXcoordFromChipChannel(chipid, ichan);
+    	      //int coorx = planesYsize - getYcoordFromChipChannel(chipid, ichan) - 1;
+    	      std::cout<<coorx<<" "<<coory<<" "<<adc<<" "<<planeNumber<<" "<<std::endl;
+    	      int coordIndex = coorx * planesXsize + coory;
+    	      if (HBUs[planeNumber][coordIndex] >= 0) std::cout << "ERROR: channel already has a value" << std::endl;
+    	      //HBUs[planeNumber][coordIndex] = gainbit ? adc : 10 * adc;
+    	      //HBUs[planeNumber][coordIndex] = 1;
+    	      if (HBUs[planeNumber][coordIndex] < 0) HBUs[planeNumber][coordIndex] = 0;
+    	      HBUHits[planeNumber]++;
+    	    }
+    	  }
+    	}
+
       }//if plane number>=0
     }//while
     
 }
 //SIWECAL *************************************************
 
-int CaliceRawEvent2StdEventConverter::isCOB_siecal(int slabadd) const {
+int CaliceCommonRawEvent2StdEventConverter::isCOB_siecal(int slabadd) const {
   for(int i=0; i<cobs.size(); i++) if(cobs.at(i)==slabadd) return 1;
   return 0;
 }
 
 
-int CaliceRawEvent2StdEventConverter::getPlaneNumberFromSlabAdd_siecal(int slabadd) const {
+int CaliceCommonRawEvent2StdEventConverter::getPlaneNumberFromSlabAdd_siecal(int slabadd) const {
   return slabadd;
 }
 
-int CaliceRawEvent2StdEventConverter::getXcoordFromChipChannel_siecal(int slabadd, int chipid, int channelNr) const {
+int CaliceCommonRawEvent2StdEventConverter::getXcoordFromChipChannel_siecal(int slabadd, int chipid, int channelNr) const {
   if(isCOB_siecal(slabadd) )
     return siwecal_I_cob[chipid][channelNr];
   else
@@ -426,7 +466,7 @@ int CaliceRawEvent2StdEventConverter::getXcoordFromChipChannel_siecal(int slabad
 }
 
 
-int CaliceRawEvent2StdEventConverter::getYcoordFromChipChannel_siecal(int slabadd, int chipid, int channelNr) const {
+int CaliceCommonRawEvent2StdEventConverter::getYcoordFromChipChannel_siecal(int slabadd, int chipid, int channelNr) const {
   if(isCOB_siecal(slabadd) )
     return siwecal_J_cob[chipid][channelNr];
   else
@@ -434,13 +474,15 @@ int CaliceRawEvent2StdEventConverter::getYcoordFromChipChannel_siecal(int slabad
 }
 
 
-void CaliceRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1, std::vector<int> &SLABHits, std::vector<std::array<int, planesXsize_siecal * planesYsize_siecal>> &SLABs) const{
+void CaliceCommonRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1, std::vector<int> &SLABHits, std::vector<std::array<int, planesXsize_siecal * planesYsize_siecal>> &SLABs) const{
   
     //    std::cout<<colName<<std::endl;
     
     auto ev = std::dynamic_pointer_cast<const eudaq::RawEvent>(d1);
     size_t nblocks = ev->NumBlocks();
 
+    
+    if(nblocks>(4+planeCount_siecal)) {
     //std::cout<<nblocks<<std::endl;
 
  
@@ -478,10 +520,11 @@ void CaliceRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1, std:
       int sca = data[2];
 
       //      std::cout<<"cycle:"<<data[0]<<" sca:"<<14-data[2]<<" slabadd:"<<slabadd<<" chipid:"<<chipid <<" chns: ";
+      //std::cout<<std::endl;
       //      if((14-data[2])>0) {
-	//	std::cout<<std::endl;
-	//continue; //ignore sca>0 for the moment
-      //}
+      //	std::cout<<std::endl;
+      //continue; //ignore sca>0 for the moment
+      //      }
       if (planeNumber >= 0) {
 
 	if(planesXsize_siecal>1000) {
@@ -522,4 +565,5 @@ void CaliceRawEvent2StdEventConverter::SiECALConverting(eudaq::EventSPC d1, std:
       }//planeNumber>=0
 
     }//while
+    }
 }
