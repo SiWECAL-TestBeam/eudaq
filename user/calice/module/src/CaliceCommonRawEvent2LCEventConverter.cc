@@ -26,7 +26,7 @@ namespace eudaq {
    }
 
    static const char* EVENT_TYPE = "CaliceCommonObject";
-   int m_debug_lastEventtEvent2;
+   int m_debug_lastEvent;
 
    class CaliceLCGenericObject: public lcio::LCGenericObjectImpl {
       public:
@@ -62,7 +62,7 @@ namespace eudaq {
      
        //      auto& source = *(d1.get());
       auto& result = *(d2.get());
-      m_debug_lastEventtEvent2 = source.GetEventN();
+      m_debug_lastEvent = source.GetEventN();
       //
       uint64_t tbTimestamp = source.GetTag("tbTimestamp", 0);
       time_t shiftedUnixTS = 0L; //reconstructed timestamp of older run
@@ -303,7 +303,7 @@ namespace eudaq {
    void CaliceCommonRawEvent2LCEventConverter::getScCALTemperatureSubEvent(const std::vector<uint8_t>& bl, LCCollectionVec *col) const {
 
       // sensor specific data
-      cout << "Looking for Temperature Collection... Evt=" << m_debug_lastEventtEvent2 << ", Size=" << bl.size() << endl;
+      cout << "Looking for Temperature Collection... Evt=" << m_debug_lastEvent << ", Size=" << bl.size() << endl;
       vector<int> vec;
       vec.resize(bl.size() / sizeof(int));
       memcpy(&vec[0], &bl[0], bl.size());
@@ -315,7 +315,7 @@ namespace eudaq {
          if ((i / 3) % 2 == 0) continue; // just ignore the first measurement data;
          if ((output.size() != 0) && (port != vec[i + 1]) && (lda != vec[i])) {
             cout << "Unfinished 8 temperature measurements!. LDA " << lda << "->" << vec[i] << ", port " << port << "->" << vec[i + 1] << ", data="
-                  << vec[i + 2] << ", size=" << output.size() << ", i=" << i << " EuEvt=" << m_debug_lastEventtEvent2 << endl;
+                  << vec[i + 2] << ", size=" << output.size() << ", i=" << i << " EuEvt=" << m_debug_lastEvent << endl;
             output.clear();
          }
          lda = vec[i];
